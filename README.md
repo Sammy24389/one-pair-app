@@ -2,17 +2,37 @@
 
 A private little world for two: best friends or couples. **No backend, no accounts, no cloud.** Your two phones talk directly to each other over WebRTC, and everything you share lives only on those two devices, kept in sync automatically.
 
+<p align="center">
+  <img src="docs/screenshots/hero.jpg" alt="OnePair: Home, Chat, Moments and Play screens" width="100%">
+</p>
+
+<p align="center">
+  <a href="https://github.com/ssuvamm/one-pair-app/releases/latest"><b>⬇️ Download the Android APK</b></a> ·
+  <a href="https://ssuvamm.github.io/one-pair-app/"><b>🌐 Open the web app</b></a>
+</p>
+
+- **Pair with a code or QR code**: no sign-up, no email, no phone number
 - **Chat**: text, photos, videos, voice notes, files, links, locations, reactions, replies
-- **Voice and video calls**, peer-to-peer over STUN/TURN
+- **Voice and video calls**, peer-to-peer over STUN/TURN, ringing even while the app is in the background (Android)
 - **Moments**: days together, anniversaries, birthdays, countdowns, a memories timeline, "On this day"
 - **Play**: daily question (answer to reveal theirs), photo of the day, tic-tac-toe, Would You Rather, This or That, Truth or Dare, shared doodle canvas
 - **Together**: shared lists, love jar, open-when letters, time capsules, gallery, links
 - **Live location**, distance apart, partner's local time and battery
 - **"Thinking of you" touches** with haptics
-- **Gentle nudges** designed with psychology in mind (see [docs/RESEARCH.md](docs/RESEARCH.md))
-- **PIN and/or biometric lock**, privacy blur
+- **Gentle nudges** designed with psychology in mind (see [docs/RESEARCH.md](docs/RESEARCH.md)); notifications open the exact message or item
+- **App lock**: PIN, or biometric with PIN fallback, plus a privacy cover in the app switcher
 - **Six themes** (Material, Glass, Soft UI, AMOLED, Paper, Aurora), accent colours, daily, custom or shared wallpapers
-- **Friends mode and Couple mode**, with multiple pairs supported
+- **Friends mode and Couple mode**, a start page you choose, and multiple pairs supported
+
+## Screenshots
+
+| Home | Chat | Moments | Daily question | Pairing |
+|:---:|:---:|:---:|:---:|:---:|
+| <img src="docs/screenshots/home.jpg" width="180" alt="Home: days together, live status, touches, moods"> | <img src="docs/screenshots/chat.jpg" width="180" alt="Chat with photo, link card and voice note"> | <img src="docs/screenshots/moments.jpg" width="180" alt="Countdowns, anniversaries and memories"> | <img src="docs/screenshots/daily.jpg" width="180" alt="Daily question, revealed once both answered"> | <img src="docs/screenshots/pair.jpg" width="180" alt="Pairing with a code or QR"> |
+
+**Six themes, each with light and dark modes:** Material, Glass, Soft UI, AMOLED, Paper, Aurora
+
+<img src="docs/screenshots/themes.jpg" alt="The six themes side by side" width="100%">
 
 ## How it works
 
