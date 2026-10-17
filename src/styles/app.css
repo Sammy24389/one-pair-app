@@ -267,7 +267,7 @@ h3 { font-size: 15px; font-weight: 650; }
   height: 46px; padding: 0 20px; border-radius: 999px;
   background: var(--accent); color: var(--accent-ink);
   font-weight: 650; transition: transform .12s var(--ease), opacity .15s;
-  white-space: nowrap;
+  white-space: nowrap; text-decoration: none;
 }
 .btn:active { transform: scale(.96); }
 .btn:disabled { opacity: .45; pointer-events: none; }

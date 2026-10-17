@@ -24,6 +24,15 @@ A private little world for two: best friends or couples. **No backend, no accoun
 - **Six themes** (Material, Glass, Soft UI, AMOLED, Paper, Aurora), accent colours, daily, custom or shared wallpapers
 - **Friends mode and Couple mode**, a start page you choose, and multiple pairs supported
 
+## Support OnePair ☕
+
+OnePair is free, ad-free and open source. If you'd like to support development:
+
+- **PayPal:** [ssuvamm@gmail.com](https://www.paypal.com/donate/?business=ssuvamm%40gmail.com&no_recurring=0&item_name=Support%20OnePair)
+- **UPI (India):** `ssuvamm@oksbi`
+
+You can also find these in the app under **Settings → Support OnePair** and **About**.
+
 ## Screenshots
 
 | Home | Chat | Moments | Daily question | Pairing |

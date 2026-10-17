@@ -6,6 +6,11 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-10-17
+
+### Added
+- **Support OnePair:** a donate card in Settings and About with PayPal (ssuvamm@gmail.com) and UPI (ssuvamm@oksbi). Tap to open PayPal or your UPI app, or copy the ID.
+
 ## [1.2.0] - 2026-10-14
 
 ### Added
