@@ -1,4 +1,5 @@
 import {ChevronRight, Image, Link2, ListChecks, Lock, Mail, MapPin, Palette, Plus, Radio, Settings2, Info} from 'lucide-react'
+import {Donate} from '../components/Donate'
 import {Avatar} from '../components/ui'
 import {identity} from '../lib/identity'
 import {push, type Sub} from '../lib/nav'
@@ -57,10 +58,14 @@ export default function More() {
           <Row icon={Palette} title="Appearance" sub="Themes, accent, wallpaper" to="appearance" />
           <Row icon={Lock} title="Privacy & lock" sub="PIN, biometrics, auto-lock" to="security" />
           <Row icon={Radio} title="Connection" sub="STUN/TURN, wake-up pings" to="connection" />
-          <Row icon={Settings2} title="Settings" sub={`${space.meta.get('mode') === 'couple' ? 'Couple' : 'Friends'} mode, nudges, chat, backup, donate`} to="settings" />
+          <Row icon={Settings2} title="Settings" sub={`${space.meta.get('mode') === 'couple' ? 'Couple' : 'Friends'} mode, nudges, chat, backup`} to="settings" />
           <Row icon={Plus} title="Add another pair" to="pair" />
           <Row icon={Info} title="About" to="about" />
         </div>
+      </div>
+
+      <div className="section">
+        <Donate />
       </div>
     </div>
   )

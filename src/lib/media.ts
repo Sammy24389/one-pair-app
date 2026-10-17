@@ -1,3 +1,4 @@
+import {nativeBridge} from './native'
 import {withSystemUi} from './platform'
 
 /** Downscale + re-encode photos before sending: fast transfers, small storage. */
@@ -44,6 +45,29 @@ const pickFilesRaw = (accept: string, multiple: boolean, capture?: 'user' | 'env
     const onFocus = () => setTimeout(() => !input.files?.length && resolve([]), 1500)
     window.addEventListener('focus', onFocus, {once: true})
     input.click()
+  })
+
+const blobToB64 = (blob: Blob) =>
+  new Promise<string>((res, rej) => {
+    const r = new FileReader()
+    r.onload = () => res((r.result as string).slice((r.result as string).indexOf(',') + 1))
+    r.onerror = () => rej(r.error)
+    r.readAsDataURL(blob)
+  })
+
+/** Save a file to the device. Android's WebView ignores <a download> for blob: URLs, so go through the native picker there. */
+export const saveBlob = (blob: Blob, name: string): Promise<boolean> =>
+  withSystemUi(async () => {
+    if (nativeBridge) {
+      const {saved} = await nativeBridge.saveFile({name, mime: blob.type || 'application/octet-stream', data: await blobToB64(blob)})
+      return saved
+    }
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = name
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+    return true
   })
 
 export class VoiceRecorder {

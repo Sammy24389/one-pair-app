@@ -15,7 +15,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.util.Base64;
 
+import androidx.activity.result.ActivityResult;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.Person;
@@ -25,13 +27,18 @@ import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
+import com.getcapacitor.annotation.ActivityCallback;
 import com.getcapacitor.annotation.CapacitorPlugin;
+
+import java.io.IOException;
+import java.io.OutputStream;
 
 /**
  * Native glue for things the web layer can't do well on Android:
  *  • instant notifications (LocalNotifications routes "now" through AlarmManager → up to a minute late)
  *  • a ringing, full-screen incoming-call notification with Answer / Decline
  *  • the keep-alive foreground service and battery-optimisation exemption
+ *  • saving files (backups, chat attachments) through the system "Save as" picker
  */
 @CapacitorPlugin(name = "OnePairNative")
 public class OnePairNativePlugin extends Plugin {
@@ -270,6 +277,38 @@ public class OnePairNativePlugin extends Plugin {
         r.put("unrestricted", pm != null && pm.isIgnoringBatteryOptimizations(getContext().getPackageName()));
         r.put("serviceRunning", KeepAliveService.running);
         call.resolve(r);
+    }
+
+    /** WebView ignores <a download> for blob: URLs, so let the user pick where to save via the system file picker. */
+    @PluginMethod
+    public void saveFile(PluginCall call) {
+        Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType(call.getString("mime", "application/octet-stream"));
+        i.putExtra(Intent.EXTRA_TITLE, call.getString("name", "onepair-file"));
+        startActivityForResult(call, i, "saveFileResult");
+    }
+
+    @ActivityCallback
+    private void saveFileResult(PluginCall call, ActivityResult result) {
+        if (call == null) return;
+        Uri uri = result.getData() != null ? result.getData().getData() : null;
+        JSObject r = new JSObject();
+        if (result.getResultCode() != Activity.RESULT_OK || uri == null) {
+            r.put("saved", false);
+            call.resolve(r);
+            return;
+        }
+        new Thread(() -> {
+            try (OutputStream out = getContext().getContentResolver().openOutputStream(uri, "wt")) {
+                if (out == null) throw new IOException("Cannot open " + uri);
+                out.write(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+                r.put("saved", true);
+                call.resolve(r);
+            } catch (Exception e) {
+                call.reject("Could not save file: " + e.getMessage());
+            }
+        }).start();
     }
 
     @PluginMethod

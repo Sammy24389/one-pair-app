@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react'
-import {Camera, Copy, Download, Fingerprint, Heart, Lock as LockIcon, Plus, RefreshCw, Trash2, Upload, Wifi} from 'lucide-react'
+import {Camera, Download, Fingerprint, Lock as LockIcon, Plus, RefreshCw, Trash2, Upload, Wifi} from 'lucide-react'
+import {Donate} from '../components/Donate'
 import {Avatar, EmojiPicker, Seg, Sheet, StartPagePicker, Switch, TopBar} from '../components/ui'
 import {dailyImageUrl, GRADIENTS} from '../lib/content'
 import {exportBackup, importBackup} from '../lib/backup'
@@ -16,42 +17,6 @@ import {cx, todayKey} from '../lib/util'
 import {putMedia} from '../lib/idb'
 
 declare const __APP_VERSION__: string
-
-const PAYPAL = 'ssuvamm@gmail.com'
-const UPI = 'ssuvamm@oksbi'
-
-const copy = (text: string) => navigator.clipboard.writeText(text).then(() => toast({title: 'Copied'}))
-
-const Donate = () => (
-  <div className="card" style={{marginTop: 14}}>
-    <h3>Support OnePair</h3>
-    <p className="tiny muted">OnePair is free, ad-free and open source. If it makes your days a little warmer, you can buy the developer a coffee ☕</p>
-    <div className="list-row">
-      <div className="grow">
-        <div style={{fontWeight: 600}}>PayPal</div>
-        <div className="tiny muted">{PAYPAL}</div>
-      </div>
-      <button className="btn ghost sm" aria-label="Copy PayPal email" onClick={() => copy(PAYPAL)}>
-        <Copy size={16} />
-      </button>
-      <a className="btn sm" href={`https://www.paypal.com/donate/?business=${encodeURIComponent(PAYPAL)}&no_recurring=0&item_name=${encodeURIComponent('Support OnePair')}`} target="_blank" rel="noopener noreferrer">
-        <Heart size={16} /> Donate
-      </a>
-    </div>
-    <div className="list-row">
-      <div className="grow">
-        <div style={{fontWeight: 600}}>UPI (India)</div>
-        <div className="tiny muted">{UPI}</div>
-      </div>
-      <button className="btn ghost sm" aria-label="Copy UPI ID" onClick={() => copy(UPI)}>
-        <Copy size={16} />
-      </button>
-      <a className="btn sm" href={`upi://pay?pa=${UPI}&pn=OnePair&cu=INR&tn=${encodeURIComponent('Support OnePair')}`}>
-        <Heart size={16} /> Pay
-      </a>
-    </div>
-  </div>
-)
 
 const Row = ({title, sub, children}: {title: string; sub?: string; children: React.ReactNode}) => (
   <div className="list-row">
@@ -560,8 +525,6 @@ const General = () => {
         </div>
       </div>
 
-      <Donate />
-
       {space && (
         <div className="card" style={{marginTop: 14}}>
           <h3 style={{color: 'var(--bad)'}}>Danger zone</h3>
@@ -588,7 +551,8 @@ const General = () => {
             onClick={async () => {
               try {
                 if (backupOpen === 'export') {
-                  if (space) await exportBackup(space, pass)
+                  if (!space || !(await exportBackup(space, pass))) return
+                  toast({title: 'Backup saved', icon: '✅'})
                 } else {
                   const [f] = await pickFiles('application/json,.json')
                   if (!f) return
@@ -629,7 +593,7 @@ const About = () => (
         Built with React, Yjs, Trystero, Capacitor, Leaflet and OpenStreetMap. Daily images from Lorem Picsum.
       </p>
     </div>
-    <Donate />
+    <Donate style={{marginTop: 14}} />
   </>
 )
 

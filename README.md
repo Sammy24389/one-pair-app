@@ -28,10 +28,10 @@ A private little world for two: best friends or couples. **No backend, no accoun
 
 OnePair is free, ad-free and open source. If you'd like to support development:
 
-- **PayPal:** [ssuvamm@gmail.com](https://www.paypal.com/donate/?business=ssuvamm%40gmail.com&no_recurring=0&item_name=Support%20OnePair)
+- **PayPal:** [ssuvamm@gmail.com](https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business=ssuvamm%40gmail.com&item_name=Support%20OnePair&currency_code=USD&no_shipping=1)
 - **UPI (India):** `ssuvamm@oksbi`
 
-You can also find these in the app under **Settings → Support OnePair** and **About**.
+You can also find these in the app under **More → Support OnePair** and **About**.
 
 ## Screenshots
 

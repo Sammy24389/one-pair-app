@@ -22,7 +22,7 @@ import {Avatar, flashEl, MediaImg, Sheet, useFocusTarget, useMediaUrl, Viewer} f
 import {STICKERS, TOUCHES} from '../lib/content'
 import {getMedia} from '../lib/idb'
 import {getPosition} from '../lib/location'
-import {compressImage, pickFiles, VoiceRecorder} from '../lib/media'
+import {compressImage, pickFiles, saveBlob, VoiceRecorder} from '../lib/media'
 import {toast} from '../lib/notify'
 import {haptic, isAppHidden, onAppVisibility} from '../lib/platform'
 import {nativeBridge} from '../lib/native'
@@ -108,7 +108,18 @@ const AudioMsg = ({id, dur}: {id: string; dur?: number}) => {
 const FileMsg = ({m}: {m: Msg}) => {
   const url = useMediaUrl(m.mediaId)
   return (
-    <a className="link-card" href={url ?? undefined} download={m.name} style={{marginTop: 0, minWidth: 200}}>
+    <a
+      className="link-card"
+      href={url ?? undefined}
+      download={m.name}
+      style={{marginTop: 0, minWidth: 200}}
+      onClick={async e => {
+        if (!nativeBridge || !m.mediaId) return
+        e.preventDefault()
+        const rec = await getMedia(m.mediaId)
+        if (rec && (await saveBlob(rec.blob, m.name ?? rec.name ?? `onepair-${m.id}`))) toast({title: 'Saved'})
+      }}
+    >
       <span className="fav">
         <FileIcon size={16} />
       </span>
@@ -598,13 +609,8 @@ export default function Chat() {
                 className="list-row"
                 onClick={async () => {
                   const rec = await getMedia(action.mediaId!)
-                  if (rec) {
-                    const a = document.createElement('a')
-                    a.href = URL.createObjectURL(rec.blob)
-                    a.download = rec.name ?? `onepair-${action.id}`
-                    a.click()
-                  }
                   setAction(null)
+                  if (rec && (await saveBlob(rec.blob, rec.name ?? `onepair-${action.id}`))) toast({title: 'Saved'})
                 }}
               >
                 <span className="ico"><FileIcon size={18} /></span>Save

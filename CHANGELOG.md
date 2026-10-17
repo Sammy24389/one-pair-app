@@ -6,6 +6,15 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-10-17
+
+### Fixed
+- **Backup export now saves a file on Android.** Export opens the system "Save as" picker so you choose where the backup goes, and confirms with "Backup saved". Before, nothing was written on Android.
+- Saving chat files and attachments works on Android too, through the same picker.
+
+### Changed
+- The **Support OnePair** card moved from Settings to the **More** page (it stays on About too). PayPal now opens a regular PayPal payment instead of PayPal Donate, which isn't available in every country.
+
 ## [1.2.1] - 2026-10-17
 
 ### Added

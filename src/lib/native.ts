@@ -11,6 +11,8 @@ type OnePairNative = {
   stopKeepAlive(): Promise<void>
   batteryStatus(): Promise<{unrestricted: boolean; serviceRunning: boolean}>
   requestBatteryExemption(): Promise<void>
+  /** Opens the system "Save as" picker; `data` is base64. */
+  saveFile(o: {name: string; mime: string; data: string}): Promise<{saved: boolean}>
   addListener(event: 'callAction', fn: (e: {action: 'answer' | 'decline' | 'show'}) => void): Promise<PluginListenerHandle>
   addListener(event: 'openRoute', fn: (e: {route: string}) => void): Promise<PluginListenerHandle>
 }

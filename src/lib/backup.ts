@@ -1,5 +1,6 @@
 import {hkdfHex, open, pbkdf2Hex, seal} from './crypto'
 import {addPair, identity, type PairRecord, type Profile} from './identity'
+import {saveBlob} from './media'
 import {settings} from './settings'
 import type {Space} from './space'
 import {getSpace} from './spaces'
@@ -12,11 +13,7 @@ export const exportBackup = async (space: Space, pass: string) => {
   const payload = JSON.stringify({pair: space.pair, profile: identity.get().profile, deviceId: identity.get().deviceId, doc: toB64(space.exportUpdate())})
   const data = await seal(key, new TextEncoder().encode(payload))
   const blob = new Blob([JSON.stringify({app: 'onepair', v: 1, salt, data})], {type: 'application/json'})
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `onepair-backup-${todayKey()}.json`
-  a.click()
-  setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+  return saveBlob(blob, `onepair-backup-${todayKey()}.json`)
 }
 
 export const importBackup = async (file: File, pass: string) => {
