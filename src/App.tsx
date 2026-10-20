@@ -1,4 +1,4 @@
-import {lazy, Suspense, useEffect, useState, useSyncExternalStore} from 'react'
+import {lazy, Suspense, useCallback, useEffect, useState, useSyncExternalStore} from 'react'
 import {Gamepad2, Heart, House, LayoutGrid, MessageCircle} from 'lucide-react'
 import {FxLayer} from './components/Fx'
 import {Toasts, useMediaUrl} from './components/ui'
@@ -150,35 +150,44 @@ const subscribeAll = (f: () => void) => {
 }
 const snapshotAll = () => allSpaces().reduce((n, s) => n + s.version, 0)
 
-const Shell = () => {
+const Shell = ({locked}: {locked: boolean}) => {
   // Land on the chosen start page whenever the main UI first appears (launch, or right after first pairing).
   useState(() => nav.get().stack.length === 0 && nav.set({tab: settings.get().startTab}))
   const {tab, stack} = nav.use()
   const sub = stack[stack.length - 1]
-  useSpaceIds()
-  useSyncExternalStore(subscribeAll, snapshotAll)
+  const ids = useSpaceIds()
+  const subscribeCalls = useCallback((f: () => void) => subscribeAll(f), [ids])
+  useSyncExternalStore(subscribeCalls, snapshotAll)
   const calling = allSpaces().find(s => s.call.state.phase !== 'idle')
+  const [minimizedCall, setMinimizedCall] = useState<string | null>(null)
+  const callKey = calling ? `${calling.pair.id}:${calling.call.state.id}` : ''
+  const minimized = !!calling && calling.call.state.phase !== 'incoming' && minimizedCall === callKey
   // Chat is a normal tab (tab bar visible) so people who open straight into it can see the other pages.
   const fullscreen = !!sub
   return (
     <div className="app">
-      <Suspense fallback={<div className="screen" />}>
-        {sub ? (
-          <SubScreen key={sub} sub={sub} />
-        ) : tab === 'home' ? (
-          <Home />
-        ) : tab === 'chat' ? (
-          <Chat />
-        ) : tab === 'moments' ? (
-          <Moments />
-        ) : tab === 'play' ? (
-          <Play />
-        ) : (
-          <More />
-        )}
-        {calling && <CallOverlay space={calling} />}
+      <Suspense fallback={null}>
+        {calling && <CallOverlay key={callKey} space={calling} minimized={minimized} locked={locked}
+          onMinimize={() => setMinimizedCall(callKey)} onRestore={() => setMinimizedCall(null)} />}
       </Suspense>
-      {!fullscreen && <TabBar />}
+      <div className="app-content" inert={locked || (!!calling && !minimized)}>
+        <Suspense fallback={<div className="screen" />}>
+          {sub ? (
+            <SubScreen key={sub} sub={sub} />
+          ) : tab === 'home' ? (
+            <Home />
+          ) : tab === 'chat' ? (
+            <Chat />
+          ) : tab === 'moments' ? (
+            <Moments />
+          ) : tab === 'play' ? (
+            <Play />
+          ) : (
+            <More />
+          )}
+        </Suspense>
+        {!fullscreen && <TabBar />}
+      </div>
     </div>
   )
 }
@@ -220,7 +229,7 @@ export default function App() {
           <Pair first />
         </Suspense>
       ) : (
-        <Shell />
+        <Shell locked={locked && s.lockMode !== 'off'} />
       )}
       {locked && s.lockMode !== 'off' && <Lock />}
       {hidden && <div className="privacy-cover" />}

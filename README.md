@@ -84,10 +84,30 @@ The first load is about 150 KB gzipped. Every secondary screen is lazy-loaded, a
 npm install
 npm run dev            # http://localhost:5173
 npm run typecheck
+npm test               # web regression suite
 npm run build          # PWA build into dist/
 ```
 
 To test pairing locally, open the dev server at two **different origins** (for example `http://localhost:5173` and `http://127.0.0.1:5173`) so each has its own storage.
+
+### Calls and image stickers
+
+During an outgoing or active call, choose **Keep chatting** to collapse the call.
+The compact bar lets you return, mute, or hang up while using the rest of the app.
+The app lock still protects chat. Microphone/camera access continues until hang-up;
+minimizing is not muting. Voice-note recording is disabled during a call.
+
+Open **Chat → Stickers → Add image sticker** to import PNG, JPEG, or WebP (up to
+2 MB). Imports become static images up to 512 pixels and 512 KB; transparency is
+preserved. The local library holds up to 32 stickers / 8 MB. **Manage** removes a
+library entry without deleting already-sent copies. Long-press a received image
+sticker and choose **Add to stickers** to save it. Old emoji stickers still work.
+The library stays on this browser/device and is not included in pair backups.
+Both devices need the updated app to render image stickers. Like other messages,
+sent stickers wait locally until both devices are online.
+
+See [implementation notes](docs/IMPLEMENTATION.md) for scope, verification gaps,
+rollback, and the planned move to reliable offline delivery and groups.
 
 ### Android
 

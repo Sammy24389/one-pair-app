@@ -45,11 +45,16 @@ export class CallController {
   private space: Space
   private ringTimeout?: ReturnType<typeof setTimeout>
   private pendingRemote: MediaStream | null = null
+  private generation = 0
+  private acquiring = false
+  private disposed = false
+  private offVisibility: () => void
+  private enablingVideo = false
 
   constructor(space: Space) {
     this.space = space
     // Ringing in the background uses the native call notification; once the app is in front, ring in-app instead.
-    onAppVisibility(hidden => {
+    this.offVisibility = onAppVisibility(hidden => {
       if (this.state.phase !== 'incoming') return
       if (hidden) {
         stopRing()
@@ -88,7 +93,7 @@ export class CallController {
   }
 
   async start(video: boolean) {
-    if (this.state.phase !== 'idle') return
+    if (this.disposed || this.acquiring || this.state.phase !== 'idle') return
     if (!this.space.online) {
       const name = this.space.peerProfile().name
       if (settings.get().ntfyEnabled) {
@@ -97,8 +102,14 @@ export class CallController {
       } else this.set({error: `${name} isn't reachable right now. They need OnePair running (it stays reachable in the background unless swiped away).`})
       return
     }
+    const generation = ++this.generation
+    this.acquiring = true
     try {
       const local = await withSystemUi(() => this.getMedia(video))
+      if (this.disposed || generation !== this.generation) {
+        local.getTracks().forEach(t => t.stop())
+        return
+      }
       const id = uid()
       this.set({...IDLE, phase: 'outgoing', id, video, outgoing: true, local})
       this.space.sendCallSignal({t: 'ring', id, video})
@@ -108,26 +119,39 @@ export class CallController {
         this.finish()
       }, RING_TIMEOUT)
     } catch (e) {
-      this.set({error: `Couldn't access ${video ? 'camera/microphone' : 'microphone'}: ${(e as Error).message}`})
+      if (generation === this.generation && !this.disposed) this.set({error: `Couldn't access ${video ? 'camera/microphone' : 'microphone'}: ${(e as Error).message}`})
+    } finally {
+      if (generation === this.generation) this.acquiring = false
     }
   }
 
   async accept() {
-    if (this.state.phase !== 'incoming') return
+    if (this.disposed || this.acquiring || this.state.phase !== 'incoming') return
+    const generation = this.generation
+    const {id, video} = this.state
+    this.acquiring = true
     // The ring timeout must not keep running once answered – it would hang up the live call.
     clearTimeout(this.ringTimeout)
     stopRing()
     nativeBridge?.cancelCall()
     try {
-      const local = await withSystemUi(() => this.getMedia(this.state.video))
+      const local = await withSystemUi(() => this.getMedia(video))
+      if (this.disposed || generation !== this.generation || this.state.id !== id) {
+        local.getTracks().forEach(t => t.stop())
+        return
+      }
       this.set({local, phase: 'active', startedAt: Date.now()})
       this.setServiceForCall(true)
-      this.space.sendCallSignal({t: 'accept', id: this.state.id})
+      this.space.sendCallSignal({t: 'accept', id})
       this.space.rtc()?.addStream(local)
       if (this.pendingRemote) this.set({remote: this.pendingRemote})
     } catch (e) {
-      this.space.sendCallSignal({t: 'decline', id: this.state.id})
-      this.set({...IDLE, error: (e as Error).message})
+      if (generation !== this.generation || this.disposed) return
+      this.space.sendCallSignal({t: 'decline', id})
+      this.set({error: (e as Error).message})
+      this.finish()
+    } finally {
+      if (generation === this.generation) this.acquiring = false
     }
   }
 
@@ -138,7 +162,10 @@ export class CallController {
   }
 
   hangup() {
-    if (this.state.phase === 'idle') return
+    if (this.state.phase === 'idle') {
+      if (this.acquiring) this.finish()
+      return
+    }
     this.space.sendCallSignal({t: this.state.phase === 'outgoing' ? 'cancel' : 'end', id: this.state.id})
     this.finish()
   }
@@ -164,7 +191,9 @@ export class CallController {
   async flipCamera() {
     const {local, facing} = this.state
     const old = local?.getVideoTracks()[0]
-    if (!local || !old || this.flipping) return
+    if (this.disposed || !local || !old || this.flipping || this.enablingVideo) return
+    const generation = this.generation
+    const current = () => !this.disposed && generation === this.generation
     this.flipping = true
     const next = facing === 'user' ? 'environment' : 'user'
     const open = async (f: 'user' | 'environment') => {
@@ -176,55 +205,81 @@ export class CallController {
       const other = cams.find(c => c.deviceId && c.deviceId !== old.getSettings().deviceId)
       if (other) constraints.push({deviceId: {exact: other.deviceId}})
       for (const video of constraints) {
+        if (!current()) return null
         try {
-          return (await navigator.mediaDevices.getUserMedia({video})).getVideoTracks()[0]
+          const stream = await navigator.mediaDevices.getUserMedia({video})
+          if (!current()) {
+            stream.getTracks().forEach(t => t.stop())
+            return null
+          }
+          return stream.getVideoTracks()[0]
         } catch {
           /* try next */
         }
       }
       return null
     }
+    let track: MediaStreamTrack | null = null
     try {
       old.stop()
-      const track = (await open(next)) ?? (await open(facing))
+      track = (await open(next)) ?? (current() ? await open(facing) : null)
+      if (!current()) {
+        track?.stop()
+        return
+      }
       if (!track) throw new Error('No camera available')
       track.enabled = !this.state.camOff
       await Promise.all(this.space.rtc()?.replaceTrack(old, track) ?? [])
+      if (!current()) {
+        track.stop()
+        return
+      }
       local.removeTrack(old)
       local.addTrack(track)
       const actual = track.getSettings().facingMode
       this.set({facing: actual === 'environment' || actual === 'user' ? actual : next, local: new MediaStream(local.getTracks())})
     } catch (e) {
-      this.set({error: `Couldn't switch camera: ${(e as Error).message}`})
+      track?.stop()
+      if (current()) this.set({error: `Couldn't switch camera: ${(e as Error).message}`})
     } finally {
-      this.flipping = false
+      if (current()) this.flipping = false
     }
   }
 
   /** Upgrade an audio call to video mid-call. */
   async enableVideo() {
     const {local} = this.state
-    if (!local || local.getVideoTracks().length) return
+    if (this.disposed || !local || local.getVideoTracks().length || this.enablingVideo || this.flipping) return
+    const generation = this.generation
+    this.enablingVideo = true
     try {
-      const cam = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'user'}})
+      const cam = await withSystemUi(() => navigator.mediaDevices.getUserMedia({video: {facingMode: 'user'}}))
+      if (this.disposed || generation !== this.generation) {
+        cam.getTracks().forEach(t => t.stop())
+        return
+      }
       const track = cam.getVideoTracks()[0]
       local.addTrack(track)
       this.space.rtc()?.addTrack(track, local)
       this.set({video: true, camOff: false, local: new MediaStream(local.getTracks())})
     } catch {
       /* camera denied */
+    } finally {
+      if (generation === this.generation) this.enablingVideo = false
     }
   }
 
   onSignal(msg: Record<string, string | boolean | number>) {
+    if (this.disposed) return
     const {t, id} = msg as {t: string; id: string}
     switch (t) {
       case 'ring':
-        if (this.state.phase !== 'idle') {
+        if (this.state.phase !== 'idle' || this.acquiring) {
           this.space.sendCallSignal({t: 'busy', id})
           return
         }
         this.pendingRemote = null
+        this.generation++
         this.set({...IDLE, phase: 'incoming', id, video: !!msg.video})
         if (isAppHidden()) this.showCallNotification()
         else {
@@ -256,15 +311,20 @@ export class CallController {
   }
 
   onRemoteStream(stream: MediaStream) {
+    if (this.disposed) return
     if (this.state.phase === 'active') this.set({remote: stream})
     else this.pendingRemote = stream
   }
 
   onPeerLeft() {
-    if (this.state.phase !== 'idle') this.finish()
+    if (this.state.phase !== 'idle' || this.acquiring) this.finish()
   }
 
   private finish() {
+    this.generation++
+    this.acquiring = false
+    this.flipping = false
+    this.enablingVideo = false
     clearTimeout(this.ringTimeout)
     stopRing()
     nativeBridge?.cancelCall()
@@ -291,5 +351,12 @@ export class CallController {
 
   clearError() {
     this.set({error: ''})
+  }
+
+  dispose() {
+    if (this.disposed) return
+    this.offVisibility()
+    this.hangup()
+    this.disposed = true
   }
 }

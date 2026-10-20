@@ -47,6 +47,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Web regression tests
+        run: npm test
+
       - name: Extract release notes from CHANGELOG.md
         run: node scripts/changelog.mjs "$TAG" > release-notes.md
 
