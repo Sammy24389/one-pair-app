@@ -19,7 +19,9 @@ import {
 } from 'lucide-react'
 import {useWallpaperCss} from '../App'
 import {Avatar, flashEl, MediaImg, Sheet, useFocusTarget, useMediaUrl, Viewer} from '../components/ui'
-import {STICKERS, TOUCHES} from '../lib/content'
+import {TOUCHES} from '../lib/content'
+import StickerPicker from '../components/StickerPicker'
+import {addSticker} from '../lib/stickers'
 import {getMedia} from '../lib/idb'
 import {getPosition} from '../lib/location'
 import {compressImage, pickFiles, saveBlob, VoiceRecorder} from '../lib/media'
@@ -131,6 +133,12 @@ const FileMsg = ({m}: {m: Msg}) => {
   )
 }
 
+const StickerMsg = ({m}: {m: Msg}) => {
+  const url = useMediaUrl(m.mediaId)
+  if (!url) return <div className="sticker-message" role="status">Waiting for sticker…</div>
+  return <img className="sticker-message" src={url} alt={m.name || 'Sticker'} loading="lazy" decoding="async" />
+}
+
 const VideoMsg = ({id}: {id: string}) => {
   const url = useMediaUrl(id)
   if (!url) return <div style={{width: 200, height: 140, display: 'grid', placeItems: 'center'}}><div className="spinner" /></div>
@@ -184,7 +192,7 @@ const Bubble = memo(function Bubble({m, mine, gap, reacts, deleted, reply, progr
     )
   if (m.kind === 'system') return <div className="system-msg" data-mid={m.id}>{m.text}</div>
 
-  const emojiOnly = (m.kind === 'text' && m.text && EMOJI_ONLY.test(m.text)) || m.kind === 'sticker'
+  const emojiOnly = (m.kind === 'text' && m.text && EMOJI_ONLY.test(m.text)) || (m.kind === 'sticker' && !m.mediaId)
   const firstUrl = m.kind === 'text' ? m.text?.match(URL_RE)?.[0] : undefined
   const isMedia = m.kind === 'image' || m.kind === 'video'
 
@@ -194,6 +202,9 @@ const Bubble = memo(function Bubble({m, mine, gap, reacts, deleted, reply, progr
     switch (m.kind) {
       case 'image':
         body = <MediaImg id={m.mediaId!} style={m.w && m.h ? {aspectRatio: `${m.w}/${m.h}`, maxWidth: 260} : {maxWidth: 260}} onClick={() => onView(m)} />
+        break
+      case 'sticker':
+        body = m.mediaId ? <StickerMsg m={m} /> : m.text
         break
       case 'video':
         body = <VideoMsg id={m.mediaId!} />
@@ -228,7 +239,7 @@ const Bubble = memo(function Bubble({m, mine, gap, reacts, deleted, reply, progr
 
   return (
     <div className={cx('msg', mine ? 'me' : 'them', gap && 'gap')} data-mid={m.id}>
-      <div className={cx('bubble', isMedia && !deleted && 'media', emojiOnly && !deleted && 'emoji')} {...press}>
+      <div className={cx('bubble', m.kind === 'sticker' && !!m.mediaId && !deleted && 'sticker-bubble', isMedia && !deleted && 'media', emojiOnly && !deleted && 'emoji')} {...press}>
         {reply && !deleted && <div className="reply-quote ellipsis">{reply.kind === 'text' ? reply.text : reply.kind === 'image' ? '📷 Photo' : reply.kind}</div>}
         {body}
         {progress !== undefined && progress < 1 && <div className="progress-ring">{Math.round(progress * 100)}%</div>}
@@ -370,15 +381,20 @@ const Composer = ({space, reply, clearReply}: {space: Space; reply: Msg | null; 
           </button>
         </div>
       )}
-      {stickers && (
-        <div className="composer-extra" style={{gridTemplateColumns: 'repeat(8, 1fr)'}}>
-          {STICKERS.map(s => (
-            <button key={s} style={{fontSize: 28}} onClick={() => (space.addMessage({kind: 'sticker', text: s}), setStickers(false))}>
-              {s}
-            </button>
-          ))}
-        </div>
-      )}
+      {stickers && <StickerPicker
+        onClose={() => { setStickers(false); taRef.current?.focus() }}
+        onEmoji={emoji => {
+          space.addMessage({kind: 'sticker', text: emoji, replyTo: reply?.id})
+          clearReply(); setStickers(false); taRef.current?.focus()
+        }}
+        onSend={async sticker => {
+          const mediaId = await space.addMedia(sticker.blob, sticker.name)
+          space.addMessage({kind: 'sticker', mediaId, name: sticker.name, mime: sticker.blob.type,
+            size: sticker.blob.size, w: sticker.w, h: sticker.h, replyTo: reply?.id})
+          clearReply(); setStickers(false); taRef.current?.focus()
+          haptic('light')
+        }}
+      />}
       {/* Buttons keep focus on the textarea so the keyboard stays open and nothing jumps under the finger. */}
       <div className="composer" onPointerDown={e => (e.target as HTMLElement).closest('button') && e.preventDefault()}>
         {rec ? (
@@ -401,6 +417,7 @@ const Composer = ({space, reply, clearReply}: {space: Space; reply: Msg | null; 
             <textarea
               ref={taRef}
               rows={1}
+              aria-label="Message"
               placeholder="Message"
               value={text}
               onChange={e => onType(e.target.value)}
@@ -429,7 +446,7 @@ const Composer = ({space, reply, clearReply}: {space: Space; reply: Msg | null; 
                 <Send size={18} />
               </button>
             ) : (
-              <button className="icon-btn accent" onClick={startRec} aria-label="Record voice message">
+              <button className="icon-btn accent" onClick={startRec} disabled={space.call.state.phase !== 'idle'} title={space.call.state.phase !== 'idle' ? 'Finish the call to record a voice message' : undefined} aria-label="Record voice message">
                 <Mic size={18} />
               </button>
             )}
@@ -615,6 +632,20 @@ export default function Chat() {
               >
                 <span className="ico"><FileIcon size={18} /></span>Save
               </button>
+            )}
+            {action.kind === 'sticker' && action.mediaId && !space.deleted.get(action.id) && (
+              <button className="list-row" onClick={async () => {
+                const message = action
+                setAction(null)
+                try {
+                  const media = await getMedia(message.mediaId!)
+                  if (!media) throw new Error('Wait for the sticker to finish downloading.')
+                  await addSticker(media.blob, message.name || 'Sticker')
+                  toast({title: 'Sticker saved to your library'})
+                } catch (e) {
+                  toast({title: 'Could not save sticker', body: e instanceof Error ? e.message : 'Try again.'})
+                }
+              }}><span className="ico"><Plus size={18} /></span>Add to stickers</button>
             )}
             {action.from === space.me && !space.deleted.get(action.id) && (
               <button className="list-row" style={{color: 'var(--bad)'}} onClick={() => (space.deleted.set(action.id, true), setAction(null))}>

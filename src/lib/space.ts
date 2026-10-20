@@ -234,6 +234,7 @@ export class Space {
   }
 
   async disconnect() {
+    this.call.hangup()
     const r = this.room
     this.room = null
     this.peerId = null
@@ -404,7 +405,7 @@ export class Space {
   }
 
   async destroy() {
-    this.call.hangup()
+    this.call.dispose()
     await this.disconnect()
     await this.persistence.destroy()
     this.doc.destroy()

@@ -6,6 +6,18 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 
 ## [Unreleased]
 
+### Added
+- Minimize outgoing and active calls to keep chatting, with return, mute, and hang-up controls.
+- Import static PNG/JPEG/WebP stickers, send them in chat, and save received stickers to a local library.
+- Bounded sticker storage, validation, loading/error states, and library management that preserves sent copies.
+- Web regression tests for call lifecycle, call UI, sticker storage, and sticker picker, enforced in CI.
+
+### Fixed
+- Stop late media permission results from reviving ended calls or leaving camera/microphone tracks open.
+- Release call visibility subscriptions and late wake locks when their owners are destroyed.
+- Subscribe to incoming calls for pairs added while the app is already open.
+- Wait for IndexedDB transactions to commit before reporting successful storage writes.
+
 ## [1.2.2] - 2026-10-17
 
 ### Fixed

@@ -16,9 +16,11 @@ const db = () =>
 const tx = async <R,>(store: StoreName, mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<R>) => {
   const d = await db()
   return new Promise<R>((resolve, reject) => {
-    const r = fn(d.transaction(store, mode).objectStore(store))
-    r.onsuccess = () => resolve(r.result)
-    r.onerror = () => reject(r.error)
+    const transaction = d.transaction(store, mode)
+    const r = fn(transaction.objectStore(store))
+    transaction.oncomplete = () => resolve(r.result)
+    transaction.onabort = () => reject(transaction.error ?? new Error('Storage transaction aborted'))
+    transaction.onerror = () => reject(transaction.error ?? r.error)
   })
 }
 
@@ -26,6 +28,30 @@ export const idbGet = <T,>(store: StoreName, key: string) => tx<T | undefined>(s
 export const idbPut = (store: StoreName, key: string, val: unknown) => tx(store, 'readwrite', s => s.put(val, key))
 export const idbDel = (store: StoreName, key: string) => tx(store, 'readwrite', s => s.delete(key))
 export const idbKeys = (store: StoreName) => tx<IDBValidKey[]>(store, 'readonly', s => s.getAllKeys()) as Promise<string[]>
+
+/** Read and update one record atomically, including across tabs. */
+export const idbUpdate = async <T,>(store: StoreName, key: string, update: (current: T | undefined) => T) => {
+  const d = await db()
+  return new Promise<T>((resolve, reject) => {
+    const transaction = d.transaction(store, 'readwrite')
+    const objectStore = transaction.objectStore(store)
+    const read = objectStore.get(key)
+    let next: T
+    let failure: unknown
+    read.onsuccess = () => {
+      try {
+        next = update(read.result as T | undefined)
+        objectStore.put(next, key)
+      } catch (error) {
+        failure = error
+        transaction.abort()
+      }
+    }
+    transaction.oncomplete = () => resolve(next)
+    transaction.onabort = () => reject(failure ?? transaction.error ?? new Error('Storage transaction aborted'))
+    transaction.onerror = () => reject(transaction.error ?? read.error)
+  })
+}
 
 export type MediaRecord = {blob: Blob; mime: string; name?: string}
 
