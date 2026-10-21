@@ -21,7 +21,10 @@ import {useWallpaperCss} from '../App'
 import {Avatar, flashEl, MediaImg, Sheet, useFocusTarget, useMediaUrl, Viewer} from '../components/ui'
 import {TOUCHES} from '../lib/content'
 import StickerPicker from '../components/StickerPicker'
+import StickerMessage from '../components/StickerMessage'
 import {addSticker} from '../lib/stickers'
+import {groupEvents, hasGroupCall} from '../lib/groups'
+import {claimMedia, releaseMedia} from '../lib/media-lease'
 import {getMedia} from '../lib/idb'
 import {getPosition} from '../lib/location'
 import {compressImage, pickFiles, saveBlob, VoiceRecorder} from '../lib/media'
@@ -133,11 +136,6 @@ const FileMsg = ({m}: {m: Msg}) => {
   )
 }
 
-const StickerMsg = ({m}: {m: Msg}) => {
-  const url = useMediaUrl(m.mediaId)
-  if (!url) return <div className="sticker-message" role="status">Waiting for sticker…</div>
-  return <img className="sticker-message" src={url} alt={m.name || 'Sticker'} loading="lazy" decoding="async" />
-}
 
 const VideoMsg = ({id}: {id: string}) => {
   const url = useMediaUrl(id)
@@ -204,7 +202,7 @@ const Bubble = memo(function Bubble({m, mine, gap, reacts, deleted, reply, progr
         body = <MediaImg id={m.mediaId!} style={m.w && m.h ? {aspectRatio: `${m.w}/${m.h}`, maxWidth: 260} : {maxWidth: 260}} onClick={() => onView(m)} />
         break
       case 'sticker':
-        body = m.mediaId ? <StickerMsg m={m} /> : m.text
+        body = m.mediaId ? <StickerMessage mediaId={m.mediaId} name={m.name} /> : m.text
         break
       case 'video':
         body = <VideoMsg id={m.mediaId!} />
@@ -256,6 +254,18 @@ const Bubble = memo(function Bubble({m, mine, gap, reacts, deleted, reply, progr
 })
 
 const Composer = ({space, reply, clearReply}: {space: Space; reply: Msg | null; clearReply: () => void}) => {
+  groupEvents.use()
+  const capture = useRef({active: true, pending: false, recorder: null as VoiceRecorder | null})
+  useEffect(() => {
+    const owner = capture.current
+    owner.active = true
+    return () => {
+      owner.active = false
+      try {owner.recorder?.cancel()} catch { /* Recorder may already be stopped. */ }
+      owner.recorder = null
+      releaseMedia(owner)
+    }
+  }, [])
   const [text, setText] = useState('')
   const [extra, setExtra] = useState(false)
   const [stickers, setStickers] = useState(false)
@@ -332,14 +342,25 @@ const Composer = ({space, reply, clearReply}: {space: Space; reply: Msg | null; 
   }
 
   const startRec = async () => {
+    const owner = capture.current
+    if (owner.pending || owner.recorder) return
+    if (!claimMedia(owner)) return toast({title: 'Finish your call before recording a voice message'})
+    owner.pending = true
+    const r = new VoiceRecorder()
     try {
-      const r = new VoiceRecorder()
       await r.start()
+      if (!owner.active) {
+        try {r.cancel()} catch { /* Permission completed after navigation. */ }
+        return
+      }
+      owner.recorder = r
       setRec(r)
       haptic('medium')
     } catch {
+      try {r.cancel()} catch { /* Initialization may leave an inactive recorder. */ }
+      releaseMedia(owner)
       toast({title: 'Microphone permission needed'})
-    }
+    } finally {owner.pending = false}
   }
 
   const stopRec = async (sendIt: boolean) => {
@@ -347,8 +368,13 @@ const Composer = ({space, reply, clearReply}: {space: Space; reply: Msg | null; 
     setRec(null)
     setRecT(0)
     if (!r) return
-    if (!sendIt) return r.cancel()
-    const out = await r.stop()
+    capture.current.recorder = null
+    if (!sendIt) {
+      try {r.cancel()} finally {releaseMedia(capture.current)}
+      return
+    }
+    let out: Awaited<ReturnType<VoiceRecorder['stop']>>
+    try {out = await r.stop()} finally {releaseMedia(capture.current)}
     if (!out) return
     const id = await space.addMedia(out.blob)
     space.addMessage({kind: 'audio', mediaId: id, mime: out.blob.type, dur: out.dur})
@@ -446,7 +472,7 @@ const Composer = ({space, reply, clearReply}: {space: Space; reply: Msg | null; 
                 <Send size={18} />
               </button>
             ) : (
-              <button className="icon-btn accent" onClick={startRec} disabled={space.call.state.phase !== 'idle'} title={space.call.state.phase !== 'idle' ? 'Finish the call to record a voice message' : undefined} aria-label="Record voice message">
+              <button className="icon-btn accent" onClick={startRec} disabled={space.call.state.phase !== 'idle' || hasGroupCall()} title={space.call.state.phase !== 'idle' || hasGroupCall() ? 'Finish the call to record a voice message' : undefined} aria-label="Record voice message">
                 <Mic size={18} />
               </button>
             )}

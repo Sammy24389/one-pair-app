@@ -9,6 +9,7 @@ import {useActiveSpace, useSpaceVersion} from '../lib/spaces'
 import {uid} from '../lib/util'
 
 const TILES: {sub: Sub; emoji: string; title: string; body: string; both?: boolean}[] = [
+  {sub: 'groups', emoji: '🎮', title: 'Multiplayer', body: 'Start a room or join with a code'},
   {sub: 'daily', emoji: '💭', title: 'Daily question', body: 'Answer to reveal theirs'},
   {sub: 'photo', emoji: '📸', title: 'Photo of the day', body: 'One snap each, every day'},
   {sub: 'game-ttt', emoji: '❌', title: 'Tic-tac-toe', body: 'Turn-based, synced live'},

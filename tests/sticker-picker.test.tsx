@@ -3,7 +3,7 @@ import {act, cleanup, fireEvent, render, screen, waitFor} from '@testing-library
 import StickerPicker from '../src/components/StickerPicker'
 import type {SavedSticker} from '../src/lib/stickers'
 const mocks = vi.hoisted(() => ({get: vi.fn(), add: vi.fn(), remove: vi.fn(), pick: vi.fn()}))
-vi.mock('../src/lib/stickers', () => ({getStickers: mocks.get, addSticker: mocks.add, removeSticker: mocks.remove, STICKER_ACCEPT: 'image/png,image/jpeg,image/webp'}))
+vi.mock('../src/lib/stickers', () => ({getStickers: mocks.get, addSticker: mocks.add, removeSticker: mocks.remove, subscribeStickers: () => () => {}, STICKER_ACCEPT: 'image/png,image/jpeg,image/webp'}))
 vi.mock('../src/lib/media', () => ({pickFiles: mocks.pick}))
 const sticker: SavedSticker = {id: 'one', name: 'Happy cat', blob: new Blob(['image'], {type: 'image/webp'}), w: 64, h: 64}
 function deferred<T>() {
@@ -109,4 +109,18 @@ it('shows library storage read errors and closes with Escape', async () => {
   expect((await screen.findByRole('alert')).textContent).toContain('Could not load stickers')
   fireEvent.keyDown(screen.getByRole('region', {name: 'Sticker library'}), {key: 'Escape'})
   expect(onClose).toHaveBeenCalledOnce()
+})
+
+it('separates Emoji and Stickers panels and supports keyboard tab switching', async () => {
+  setup()
+  await screen.findByText(/Your saved stickers will appear here/)
+  expect(screen.getByRole('tabpanel', {name: 'Stickers'})).toBeTruthy()
+  expect(screen.queryByRole('tabpanel', {name: 'Emoji'})).toBeNull()
+  const emoji = screen.getByRole('tab', {name: 'Emoji'})
+  fireEvent.click(emoji)
+  expect(screen.queryByRole('button', {name: 'Add image sticker'})).toBeNull()
+  expect(screen.getByRole('tabpanel', {name: 'Emoji'})).toBeTruthy()
+  fireEvent.keyDown(emoji, {key: 'ArrowRight'})
+  expect(document.activeElement).toBe(screen.getByRole('tab', {name: 'Stickers'}))
+  expect(screen.getByRole('tabpanel', {name: 'Stickers'})).toBeTruthy()
 })

@@ -1,3 +1,4 @@
+import {groupEvents, groupRecoveryTargets, groupRegistry, hasGroupCall, initializeGroups, onGroupMessage} from './lib/groups'
 import {burst} from './components/Fx'
 import {TOUCHES} from './lib/content'
 import {identity} from './lib/identity'
@@ -6,9 +7,10 @@ import {planNotifications} from './lib/nudges'
 import {nativeBridge} from './lib/native'
 import {initChannels, notifyNow, pingPartner, toast} from './lib/notify'
 import {hapticPattern, isAppHidden, isNative, onAppVisibility} from './lib/platform'
-import {initAutoLock} from './lib/security'
+import {initAutoLock, lockState} from './lib/security'
 import {settings} from './lib/settings'
-import {allSpaces, onSpaceCreated, reconnectAll, syncSpaces} from './lib/spaces'
+import {allSpaces, onSpaceCreated, syncSpaces} from './lib/spaces'
+import {createReachability} from './lib/reachability'
 import {playHeart, playPop} from './lib/sound'
 import type {Msg} from './lib/types'
 
@@ -41,10 +43,33 @@ const viewingChat = (pairId: string) =>
   !isAppHidden() && nav.get().tab === 'chat' && !nav.get().stack.length && settings.get().activePairId === pairId
 
 export const bootstrap = () => {
+  initializeGroups()
   initAutoLock()
   initChannels()
 
+  const recovery = createReachability({targets: () => [
+    ...allSpaces().map(space => ({
+      id: space.pair.id,
+      online: space.online,
+      busy: space.call.busy || space.call.state.phase !== 'idle',
+      reconnect: () => space.reconnect()
+    })),
+    ...groupRecoveryTargets()
+  ]})
+  let missingGroups = ''
+  groupEvents.subscribe(() => {
+    const next = groupRecoveryTargets().filter(group => !group.online && !group.busy).map(group => group.id).sort().join(',')
+    if (next !== missingGroups) { missingGroups = next; if (next) recovery.wake() }
+  })
+
   onSpaceCreated(space => {
+    let wasOnline = space.online
+    space.subscribe(() => {
+      const online = space.online
+      if (wasOnline && !online) recovery.wake()
+      wasOnline = online
+    })
+    recovery.wake()
     // Incoming messages → in-app toast or system notification.
     space.onIncoming(m => {
       if (m.from === space.me) return
@@ -85,6 +110,21 @@ export const bootstrap = () => {
     })
   })
 
+  onGroupMessage((group, message) => {
+    const age = Date.now() - message.ts
+    if (message.from === identity.get().deviceId || age < -5000 || age >= 60_000) return
+    const hidden = isAppHidden()
+    const privatePreview = lockState.get().locked || (hidden && settings.get().privacyBlur)
+    const title = privatePreview ? 'OnePair' : group.record.title
+    const body = privatePreview ? 'New group message' : `${message.name}: ${message.text}`
+    const route: Route = {sub: 'groups', focus: group.record.id, tab: 'more'}
+    if (hidden) void notifyNow(title, body, route)
+    else {
+      toast({title, body, icon: '💬', action: () => openRoute(route)})
+      playPop()
+    }
+  })
+
   syncSpaces()
 
   // Presence: battery + visibility, shared live with the partner.
@@ -110,25 +150,30 @@ export const bootstrap = () => {
   onAppVisibility(h => {
     sharePresence()
     if (h) planNotifications(allSpaces())
-    else allSpaces().forEach(s => s.conn !== 'online' && s.reconnect())
+    else recovery.wake()
   })
   setInterval(sharePresence, 120_000)
   setTimeout(sharePresence, 3000)
 
-  window.addEventListener('online', reconnectAll)
+  window.addEventListener('online', () => recovery.wake())
+  window.addEventListener('offline', () => recovery.offline())
+  window.addEventListener('pageshow', () => recovery.wake())
+  document.addEventListener('resume', () => recovery.wake())
+  recovery.wake()
 
   if (nativeBridge) {
     const bridge = nativeBridge
-    // Stay reachable in the background (foreground service) whenever there's at least one pair.
+    // Keep pair and room-only members reachable using the same background preference.
     const syncKeepAlive = () => {
-      const want = settings.get().keepAlive && identity.get().pairs.length > 0
-      const inCall = allSpaces().some(s => s.call.state.phase === 'active')
+      const want = settings.get().keepAlive && (identity.get().pairs.length > 0 || groupRegistry.get().records.length > 0)
+      const inCall = hasGroupCall() || allSpaces().some(s => s.call.state.phase === 'active')
       if (inCall) return
       ;(want ? bridge.startKeepAlive() : bridge.stopKeepAlive()).catch(() => {})
     }
     syncKeepAlive()
     settings.subscribe(syncKeepAlive)
     identity.subscribe(syncKeepAlive)
+    groupRegistry.subscribe(syncKeepAlive)
     onAppVisibility(h => !h && syncKeepAlive())
 
     // Tapped message/missed-call notifications open the relevant screen.

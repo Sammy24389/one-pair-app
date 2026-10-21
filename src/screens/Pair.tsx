@@ -5,7 +5,7 @@ import {Avatar, Seg, Sheet, TopBar} from '../components/ui'
 import {importBackup} from '../lib/backup'
 import {pickFiles} from '../lib/media'
 import {identity, regenerateCode, type Mode} from '../lib/identity'
-import {goTab} from '../lib/nav'
+import {goTab, push} from '../lib/nav'
 import {settings} from '../lib/settings'
 import {PairingSession, type PairingView} from '../lib/pairing'
 import {isValidCode, normalizeCode, todayKey} from '../lib/util'
@@ -250,6 +250,7 @@ export default function Pair({first}: {first?: boolean}) {
       ) : (
         <TopBar title="Add a pair" sub="Share your code or enter theirs" />
       )}
+      {first && <button className="btn block" style={{margin: '12px 0'}} onClick={() => push('groups')}>Multiplayer & group calls · join with room code</button>}
       <div style={{margin: '8px 0 16px'}}>
         <Seg value={role} onChange={setRole} options={[['host', 'Share my code'], ['guest', 'Enter a code']]} />
       </div>

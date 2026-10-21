@@ -7,6 +7,11 @@ export const STICKER_LIBRARY_LIMIT = 8 * 1024 * 1024
 const KEY = 'onepair.stickers.v1'
 export const STICKER_ACCEPT = 'image/png,image/jpeg,image/webp'
 export type SavedSticker = {id: string; name: string; blob: Blob; w: number; h: number}
+const listeners = new Set<(rows: SavedSticker[]) => void>()
+export const subscribeStickers = (listener: (rows: SavedSticker[]) => void) => {
+  listeners.add(listener)
+  return () => {listeners.delete(listener)}
+}
 
 export const validateStickerFile = async (file: Blob) => {
   if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) throw new Error('Choose a PNG, JPEG, or WebP image.')
@@ -45,12 +50,18 @@ export const addSticker = async (file: Blob, name = 'Sticker') => {
   const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', await prepared.blob.arrayBuffer()))
   const id = Array.from(hash, b => b.toString(16).padStart(2, '0')).join('')
   const sticker: SavedSticker = {id, name: name.replace(/\.[^.]+$/, '').slice(0, 40).trim() || 'Sticker', ...prepared}
-  return idbUpdate<SavedSticker[]>('kv', KEY, (current = []) => {
+  const rows = await idbUpdate<SavedSticker[]>('kv', KEY, (current = []) => {
     if (current.some(s => s.id === id)) return current
     if (current.length >= STICKER_COUNT) throw new Error('Your library is full. Remove a sticker before adding another.')
     if (current.reduce((n, s) => n + s.blob.size, 0) + sticker.blob.size > STICKER_LIBRARY_LIMIT) throw new Error('Your sticker library is full. Remove a sticker to free space.')
     return [...current, sticker]
   })
+  listeners.forEach(listener => listener(rows))
+  return rows
 }
 
-export const removeSticker = (id: string) => idbUpdate<SavedSticker[]>('kv', KEY, (current = []) => current.filter(s => s.id !== id))
+export const removeSticker = async (id: string) => {
+  const rows = await idbUpdate<SavedSticker[]>('kv', KEY, (current = []) => current.filter(s => s.id !== id))
+  listeners.forEach(listener => listener(rows))
+  return rows
+}

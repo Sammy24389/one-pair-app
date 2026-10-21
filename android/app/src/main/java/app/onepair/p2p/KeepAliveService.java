@@ -17,8 +17,8 @@ import androidx.core.app.ServiceCompat;
 import androidx.core.content.ContextCompat;
 
 /**
- * Foreground service that keeps the app process alive (and un-frozen) while it's in the background,
- * so the peer-to-peer connection stays up and messages/calls arrive without any server or push service.
+ * User-visible foreground service that improves process survival in the background.
+ * Doze, OEM battery policy and WebView suspension can still interrupt peer reception.
  * During a call it also holds the microphone/camera types so audio keeps flowing if the user leaves the app.
  */
 public class KeepAliveService extends Service {
@@ -87,7 +87,7 @@ public class KeepAliveService extends Service {
         return new NotificationCompat.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_heart)
             .setColor(0xFFE8577E)
-            .setContentTitle(audio ? "OnePair call in progress" : "OnePair is reachable")
+            .setContentTitle(audio ? "OnePair call in progress" : "OnePair background connection")
             .setContentText(audio ? "Tap to return to your call" : "Listening for messages and calls from your pair")
             .setOngoing(true)
             .setSilent(true)

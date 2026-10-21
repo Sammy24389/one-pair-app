@@ -7,7 +7,7 @@ it('ends media capture before leaving the connection when a user reconnects', as
   const leave = vi.fn(async () => {events.push('leave')})
   const bump = vi.fn()
   const space = Object.assign(Object.create(Space.prototype), {
-    call: {hangup}, room: {leave}, peerId: 'peer', conn: 'online', bump
+    call: {hangup}, room: {leave}, peerId: 'peer', conn: 'online', bump, connectionGeneration: 0, requested: new Set()
   }) as Space
   await space.disconnect()
   expect(events).toEqual(['hangup','leave'])

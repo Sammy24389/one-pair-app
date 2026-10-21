@@ -7,6 +7,10 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 ## [Unreleased]
 
 ### Added
+- Private multiplayer rooms with expiring 12-character invite codes and group calls for up to four devices.
+- Eight turn-based games: darts, word chain, basketball, paintball, four in a row, checkers, mancala, and cup pong.
+- Text statuses that expire after 24 hours and bounded background reconnection.
+- Separate emoji/sticker tabs, visible received-sticker saving, and a minimized participant video grid while chatting.
 - Minimize outgoing and active calls to keep chatting, with return, mute, and hang-up controls.
 - Import static PNG/JPEG/WebP stickers, send them in chat, and save received stickers to a local library.
 - Bounded sticker storage, validation, loading/error states, and library management that preserves sent copies.

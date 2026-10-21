@@ -23,6 +23,8 @@ export type Sub =
   | 'connection'
   | 'about'
   | 'mood'
+  | 'status'
+  | 'groups'
 
 /** Pages a user can pick as the one OnePair opens on. */
 export const START_TABS: Tab[] = ['home', 'chat', 'moments', 'play']
