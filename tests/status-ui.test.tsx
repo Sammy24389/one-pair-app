@@ -1,22 +1,35 @@
 import {afterEach, beforeEach, expect, it, vi} from 'vitest'
 import {act, cleanup, fireEvent, render, screen} from '@testing-library/react'
+import type {Space} from '../src/lib/space'
 import type {ReactNode} from 'react'
 import * as Y from 'yjs'
 import Status from '../src/screens/Status'
 import {postStatus, STATUS_LIFETIME, type StatusRecord} from '../src/lib/status'
 
-const mocks = vi.hoisted(() => ({space: null as null | {
-  statuses: Y.Map<StatusRecord>; me: string; peer: string; peerProfile: () => {name: string}
-}}))
-vi.mock('../src/lib/spaces', () => ({useActiveSpace: () => mocks.space, useSpaceVersion: () => 0}))
-vi.mock('../src/components/ui', () => ({TopBar: ({title, sub}: {title: ReactNode; sub: ReactNode}) => <header><h1>{title}</h1><p>{sub}</p></header>}))
+const mocks = vi.hoisted(() => ({space: null as Space | null, others: [] as Space[], ids: ['one'], pick: vi.fn(), store: vi.fn(), url: null as string | null}))
+vi.mock('../src/lib/spaces', () => ({allSpaces: () => [mocks.space!, ...mocks.others], useSpaceIds: () => mocks.ids}))
+vi.mock('../src/lib/media', () => ({pickFiles: mocks.pick}))
+vi.mock('../src/lib/idb', () => ({putMedia: mocks.store}))
+vi.mock('../src/components/ui', () => ({useMediaUrl: () => mocks.url, TopBar: ({title, sub}: {title: ReactNode; sub: ReactNode}) => <header><h1>{title}</h1><p>{sub}</p></header>}))
+function makeSpace(peer = 'peer', name = 'Sam') {
+  const statuses = new Y.Doc().getMap<StatusRecord>('statuses')
+  return {statuses, me: 'me', peer, ready: Promise.resolve(), peerProfile: () => ({name}), subscribe: (listener: () => void) => {
+    statuses.observe(listener)
+    return () => statuses.unobserve(listener)
+  }} as unknown as Space
+}
 
 beforeEach(() => {
   vi.useFakeTimers()
   vi.setSystemTime(new Date('2026-10-21T12:00:00Z'))
-  mocks.space = {statuses: new Y.Doc().getMap<StatusRecord>('statuses'), me: 'me', peer: 'peer', peerProfile: () => ({name: 'Sam'})}
+  mocks.space = makeSpace()
+  mocks.others = []
+  mocks.pick.mockReset()
+  mocks.store.mockReset().mockResolvedValue(undefined)
+  mocks.url = null
+  vi.stubGlobal('URL', {createObjectURL: vi.fn(() => 'blob:preview'), revokeObjectURL: vi.fn()})
 })
-afterEach(() => { cleanup(); mocks.space?.statuses.doc?.destroy(); vi.useRealTimers() })
+afterEach(() => { cleanup(); [mocks.space!, ...mocks.others].forEach(s => s.statuses.doc?.destroy()); vi.useRealTimers(); vi.unstubAllGlobals() })
 
 it('labels the composer accessibly and disables publishing empty or whitespace updates', () => {
   render(<Status />)
@@ -30,17 +43,17 @@ it('labels the composer accessibly and disables publishing empty or whitespace u
   expect(share.disabled).toBe(true)
 })
 
-it('publishes a trimmed update to the real Yjs map and clears the composer', () => {
+it('publishes a trimmed update to the real Yjs map and clears the composer', async () => {
   render(<Status />)
   const input = screen.getByRole('textbox', {name: 'Your update'}) as HTMLTextAreaElement
   fireEvent.change(input, {target: {value: '  Good morning  '}})
-  fireEvent.click(screen.getByRole('button', {name: 'Share status'}))
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Share status'})) })
   const updates = [...mocks.space!.statuses.values()]
   expect(updates).toHaveLength(1)
   expect(updates[0]).toMatchObject({from: 'me', text: 'Good morning', ts: Date.now()})
   expect(screen.getByText('Good morning')).toBeTruthy()
   expect(input.value).toBe('')
-  expect(screen.getByRole('status').textContent).toContain('It will sync when your pair connects')
+  expect(screen.getByRole('status').textContent).toContain('It will sync when your paired users connect')
 })
 
 it('only offers deletion for the local update and preserves the paired person update', () => {
@@ -55,12 +68,12 @@ it('only offers deletion for the local update and preserves the paired person up
   expect(screen.getByText('From Sam')).toBeTruthy()
 })
 
-it('shows the active-limit error and keeps the draft for correction', () => {
+it('shows the active-limit error and keeps the draft for correction', async () => {
   for (let i = 0; i < 5; i++) postStatus(mocks.space!.statuses, 'me', `Update ${i}`)
   render(<Status />)
   const input = screen.getByRole('textbox', {name: 'Your update'}) as HTMLTextAreaElement
   fireEvent.change(input, {target: {value: 'One too many'}})
-  fireEvent.click(screen.getByRole('button', {name: 'Share status'}))
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Share status'})) })
   expect(screen.getByRole('alert').textContent).toContain('5 active statuses')
   expect(input.value).toBe('One too many')
   expect(mocks.space!.statuses.size).toBe(5)
@@ -75,4 +88,65 @@ it('expires updates on the open screen and cleans up the refresh timer', () => {
   expect(mocks.space!.statuses.size).toBe(0)
   view.unmount()
   expect(vi.getTimerCount()).toBe(0)
+})
+
+it('shows every paired person and deduplicates own shared posts', () => {
+  const other = makeSpace('lee', 'Lee')
+  mocks.others = [other]
+  postStatus(mocks.space!.statuses, 'peer', 'Sam update')
+  postStatus(other.statuses, 'lee', 'Lee update')
+  const own = postStatus(mocks.space!.statuses, 'me', 'Shared once')
+  other.statuses.set(own.id, own)
+  render(<Status />)
+  expect(screen.getByText('Sam update')).toBeTruthy()
+  expect(screen.getByText('Lee update')).toBeTruthy()
+  expect(screen.getAllByText('Shared once')).toHaveLength(1)
+  fireEvent.click(screen.getByRole('button', {name: 'Delete'}))
+  expect(other.statuses.get(own.id)).toBeUndefined()
+})
+
+it('shares a photo without a caption to every current pair and clears its preview', async () => {
+  mocks.others = [makeSpace('lee', 'Lee')]
+  const file = new File(['photo'], 'photo.png', {type: 'image/png'})
+  mocks.pick.mockResolvedValue([file])
+  render(<Status />)
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Add photo or video'})) })
+  expect(screen.getByAltText('Selected photo preview')).toBeTruthy()
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Share status'})) })
+  const first = [...mocks.space!.statuses.values()][0]
+  expect(first).toMatchObject({kind: 'image', text: '', mime: 'image/png', size: 5})
+  expect([...mocks.others[0].statuses.values()]).toEqual([first])
+  expect(mocks.store).toHaveBeenCalledTimes(1)
+  expect(screen.queryByAltText('Selected photo preview')).toBeNull()
+  expect(screen.getByText(/Waiting for media/)).toBeTruthy()
+  expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview')
+})
+
+it('preserves the draft after storage failure, rejects invalid files and handles cancelled selection', async () => {
+  mocks.pick.mockResolvedValueOnce([]).mockResolvedValueOnce([new File(['bad'], 'bad.svg', {type: 'image/svg+xml'})]).mockResolvedValueOnce([new File(['video'], 'clip.mp4', {type: 'video/mp4'})])
+  render(<Status />)
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Add photo or video'})) })
+  expect(screen.queryByRole('alert')).toBeNull()
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Add photo or video'})) })
+  expect(screen.getByRole('alert').textContent).toContain('10 MB')
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Add photo or video'})) })
+  expect(screen.getByLabelText('Selected video preview')).toBeTruthy()
+  mocks.store.mockRejectedValueOnce(new Error('Storage full'))
+  await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Share status'})) })
+  expect(screen.getByRole('alert').textContent).toBe('Storage full')
+  expect(mocks.space!.statuses.size).toBe(0)
+  expect(screen.getByLabelText('Selected video preview')).toBeTruthy()
+})
+
+it('plays received videos with controls without autoplay and exposes a playback retry', () => {
+  mocks.url = 'blob:received'
+  postStatus(mocks.space!.statuses, 'peer', '', Date.now(), {kind: 'video', mediaId: 'video', mime: 'video/mp4', size: 5})
+  render(<Status />)
+  const video = screen.getByLabelText('Status video') as HTMLVideoElement
+  expect(video.controls).toBe(true)
+  expect(video.autoplay).toBe(false)
+  fireEvent.error(video)
+  expect(screen.getByRole('alert')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', {name: 'Retry media'}))
+  expect(screen.getByLabelText('Status video')).toBeTruthy()
 })

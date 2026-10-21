@@ -7,7 +7,7 @@ import {iceServers} from './settings'
 import {getMedia, hasMedia, putMedia} from './idb'
 import {fromB64, todayKey, toHex, uid} from './util'
 import {CallController} from './call'
-import type {StatusRecord} from './status'
+import {activeStatuses, type StatusRecord} from './status'
 import type {
   DailyEntry,
   DailyPhoto,
@@ -204,6 +204,13 @@ export class Space {
     }
     this.act.media.onMessage = async (data, {metadata}) => {
       const m = metadata as {id: string; mime: string; name?: string}
+      const status = activeStatuses(this.statuses, [this.me, this.peer]).find(s => s.mediaId === m?.id)
+      if (status && (bin(data).byteLength !== status.size || m.mime !== status.mime)) {
+        this.transfers.delete(m.id)
+        this.requested.delete(m.id)
+        this.bump()
+        return
+      }
       await putMedia(m.id, new Blob([bin(data) as BlobPart], {type: m.mime}), m.name)
       this.transfers.delete(m.id)
       this.requested.delete(m.id)
@@ -342,6 +349,9 @@ export class Space {
     for (const m of this.messages) if (m.mediaId && !this.deleted.get(m.id)) ids.add(m.mediaId)
     for (const d of this.days.values()) if (d.mediaId) ids.add(d.mediaId)
     for (const p of this.photos.values()) ids.add(p.mediaId)
+    for (const status of activeStatuses(this.statuses, [this.me, this.peer])) {
+      if (status.mediaId) ids.add(status.mediaId)
+    }
     const wp = this.meta.get('wallpaper')
     if (typeof wp === 'string' && wp) ids.add(wp)
     return ids

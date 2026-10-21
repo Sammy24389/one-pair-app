@@ -59,3 +59,27 @@ describe('private pair statuses', () => {
     expect(activeStatuses(b, ['me'], now)).toEqual([])
   })
 })
+
+
+describe('status media validation', () => {
+  it('supports media-only posts, optional captions and 24-hour expiry', () => {
+    for (const [kind, mime] of [['image', 'image/png'], ['video', 'video/mp4']] as const) {
+      const statuses = create()
+      const media = {kind, mediaId: 'media', mime, size: 10}
+      const record = postStatus(statuses, 'me', '', now, media)
+      expect(validStatus(record)).toBe(true)
+      expect(activeStatuses(statuses, ['me'], now)).toEqual([record])
+      expect(activeStatuses(statuses, ['me'], now + STATUS_LIFETIME)).toEqual([])
+      expect(postStatus(statuses, 'me', ' Caption ', now, media).text).toBe('Caption')
+    }
+  })
+  it('rejects incompatible, incomplete, empty and excessive media metadata', () => {
+    const base = {id:'photo', from:'me', text:'', ts:now, kind:'image', mediaId:'media', mime:'image/png', size:1}
+    for (const patch of [{kind:'video'}, {mime:'image/svg+xml'}, {mediaId:''}, {mediaId:'x'.repeat(129)}, {size:0}, {size:NaN}, {size:1.5}, {size:10*1024*1024+1}, {kind:undefined}, {size:undefined}]) {
+      expect(validStatus({...base,...patch})).toBe(false)
+    }
+    expect(validStatus({...base,size:10*1024*1024})).toBe(true)
+    expect(validStatus({...base,kind:'video',mime:'video/webm',size:25*1024*1024})).toBe(true)
+    expect(validStatus({...base,kind:'video',mime:'video/webm',size:25*1024*1024+1})).toBe(false)
+  })
+})
