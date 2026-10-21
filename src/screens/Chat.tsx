@@ -202,7 +202,7 @@ const Bubble = memo(function Bubble({m, mine, gap, reacts, deleted, reply, progr
         body = <MediaImg id={m.mediaId!} style={m.w && m.h ? {aspectRatio: `${m.w}/${m.h}`, maxWidth: 260} : {maxWidth: 260}} onClick={() => onView(m)} />
         break
       case 'sticker':
-        body = m.mediaId ? <StickerMessage mediaId={m.mediaId} name={m.name} /> : m.text
+        body = m.mediaId ? <StickerMessage mediaId={m.mediaId} name={m.name} mime={m.mime} /> : m.text
         break
       case 'video':
         body = <VideoMsg id={m.mediaId!} />

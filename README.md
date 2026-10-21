@@ -24,6 +24,14 @@ A private little world for two: best friends or couples. **No backend, no accoun
 - **Six themes** (Material, Glass, Soft UI, AMOLED, Paper, Aurora), accent colours, daily, custom or shared wallpapers
 - **Friends mode and Couple mode**, a start page you choose, and multiple pairs supported
 
+## Profile media and stickers
+
+Choose **More → Profile → photo/video** for a display photo (up to10MB) or a muted looping MP4/WebM profile video (up to5MB,15seconds,720p). Profile videos are stored on-device and sync to paired devices when connected. Old photo profiles remain compatible.
+
+In a chat, open **Emoji → Stickers → Add sticker**. Still PNG/JPEG/WebP images open a square crop editor with zoom/position controls, Crop and add, Keep full image and Cancel. Animated WebP/GIF/APNG files retain their frames (up to2MB/512px); silent MP4/WebM stickers support up to5MB/15seconds/720px. The library is capped at32items/32MB. Received stickers can be saved again. Device codec support applies.
+
+For WhatsApp files, see [manual import instructions](docs/WHATSAPP-STICKERS.md). Import original individual files; copying a favourite or pack link alone does not import the sticker. Older clients must update to display video profiles/stickers.
+
 ## P2P additions in this fork
 
 Existing 12-character pairing stays unchanged. **More → Status** shows updates from every paired user. Share text, photos (JPG/PNG/WebP, up to 10 MB) or videos (MP4/WebM, up to 25 MB) with all current pairs for 24 hours. Add an optional caption of up to 500 characters; keep up to five active updates. Files transfer when both peers are online. Feed expiry does not automatically erase downloaded files from device storage. Older app versions need updating to view media statuses. Chat has separate Emoji and Stickers tabs, with a searchable local Unicode 17.0 catalogue (3,953 emoji/components including skin tones, flags and ZWJ sequences). New glyphs depend on device font support. Tap Add to stickers below an image sticker to save it; Keep chatting keeps video calls visible in a compact panel. Drag its grip/name header to move it; arrow keys also reposition it and Home resets placement. Full video frames stay visible without tight cropping.

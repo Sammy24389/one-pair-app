@@ -3,6 +3,7 @@ import {IndexeddbPersistence} from 'y-indexeddb'
 import {joinRoom, type Room, type MessageAction} from 'trystero'
 import {hkdf, hkdfHex, hmacHex, timingSafeEqual} from './crypto'
 import {identity, type PairRecord, type Profile} from './identity'
+import {validProfileMedia} from './profile-media'
 import {iceServers} from './settings'
 import {getMedia, hasMedia, putMedia} from './idb'
 import {fromB64, todayKey, toHex, uid} from './util'
@@ -351,6 +352,10 @@ export class Space {
     for (const p of this.photos.values()) ids.add(p.mediaId)
     for (const status of activeStatuses(this.statuses, [this.me, this.peer])) {
       if (status.mediaId) ids.add(status.mediaId)
+    }
+    for (const device of [this.me, this.peer]) {
+      const media = this.profiles.get(device)?.avatarMedia
+      if (validProfileMedia(media)) ids.add(media.id)
     }
     const wp = this.meta.get('wallpaper')
     if (typeof wp === 'string' && wp) ids.add(wp)

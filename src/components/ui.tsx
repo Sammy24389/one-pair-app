@@ -7,13 +7,52 @@ import {dismissToast, toasts} from '../lib/notify'
 import type {Profile} from '../lib/identity'
 import type {ConnState} from '../lib/space'
 import {cx} from '../lib/util'
+import {profileVideoUrl, validProfileMedia} from '../lib/profile-media'
 
-export const Avatar = ({p, size = 40, conn}: {p: Profile; size?: number; conn?: ConnState}) => (
-  <div className="avatar" style={{width: size, height: size, fontSize: size * 0.5}}>
-    {p.avatar ? <img src={p.avatar} alt="" /> : <span>{p.emoji}</span>}
+export const Avatar = ({p, size = 40, conn}: {p: Profile; size?: number; conn?: ConnState}) => {
+  const reduceMotion = settings.use(s => s.reduceMotion)
+  const [systemMotion, setSystemMotion] = useState(() => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false)
+  const [media, setMedia] = useState<{id: string; url: string} | null>(null)
+  const [failed, setFailed] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  useEffect(() => {
+    const video = videoRef.current
+    if (!video) return
+    if (reduceMotion || systemMotion) video.pause()
+    else void video.play().catch(() => setFailed(true))
+  }, [reduceMotion, systemMotion, media?.url])
+  useEffect(() => {
+    const query = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!query) return
+    const change = () => setSystemMotion(query.matches)
+    query.addEventListener('change', change)
+    return () => query.removeEventListener('change', change)
+  }, [])
+  const id = validProfileMedia(p.avatarMedia) ? p.avatarMedia.id : ''
+  useEffect(() => {
+    let live = true
+    let owned: string | null = null
+    setFailed(false)
+    setMedia(null)
+    const load = async () => {
+      if (!id || !p.avatarMedia) return
+      try {
+        const url = await profileVideoUrl(p.avatarMedia)
+        if (!live) {if (url) URL.revokeObjectURL(url); return}
+        if (owned) URL.revokeObjectURL(owned)
+        owned = url
+        setMedia(url ? {id, url} : null)
+      } catch { if (live) setFailed(true) }
+    }
+    void load()
+    const off = onMediaStored(storedId => {if (storedId === id) void load()})
+    return () => {live = false; off(); if (owned) URL.revokeObjectURL(owned)}
+  }, [id, p.avatarMedia?.mime, p.avatarMedia?.size])
+  return <div className="avatar" style={{width: size, height: size, fontSize: size * .5}}>
+    {media?.id === id && !failed ? <video ref={videoRef} key={media.url} src={media.url} muted loop autoPlay={!reduceMotion && !systemMotion} playsInline preload="metadata" onError={() => setFailed(true)} onPlay={e => {if (reduceMotion || systemMotion) e.currentTarget.pause()}} style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%'}} /> : p.avatar && !failed && /^data:image\/(?:webp|jpeg|png|gif|avif);base64,/.test(p.avatar) && p.avatar.length <= 250000 ? <img src={p.avatar} alt="" onError={() => setFailed(true)} /> : <span>{p.emoji}</span>}
     {conn && <i className={cx('dot', conn === 'online' && 'on', conn === 'searching' && 'searching')} />}
   </div>
-)
+}
 
 export const TopBar = ({title, sub, right, noBack}: {title: ReactNode; sub?: ReactNode; right?: ReactNode; noBack?: boolean}) => (
   <div className="topbar">
