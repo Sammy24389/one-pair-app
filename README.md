@@ -24,6 +24,18 @@ A private little world for two: best friends or couples. **No backend, no accoun
 - **Six themes** (Material, Glass, Soft UI, AMOLED, Paper, Aurora), accent colours, daily, custom or shared wallpapers
 - **Friends mode and Couple mode**, a start page you choose, and multiple pairs supported
 
+## P2P additions in this fork
+
+Existing 12-character pairing stays unchanged. **More → Status** shares text updates with the selected pair for 24 hours (up to five active updates, 500 characters each). Chat has separate Emoji and Stickers tabs. Tap Add to stickers below an image sticker to save it; Keep chatting keeps video calls visible in a bottom-right panel.
+
+**Play → Multiplayer → Start a room** shows a 12-character invite code. Friends choose Join with code; a separate private pairing is not required. New users can choose Multiplayer & group calls on the initial connection screen. Codes expire after ten minutes, and the inviter must stay online. Share codes only with intended participants. Older full invitations still work. Groups support text chat, direct voice/video calls, and a turn-based game library: darts, word chain, basketball, tactical paintball, four in a row, American checkers, Kalah mancala, cup pong, and Race to 21. Board games use two players; party games support two to four. Each participant explicitly joins a call; minimize it to keep chatting or navigate elsewhere. The group creator hosts the game and must remain connected. Games pause for disconnected participants; reloading the creator ends the in-memory match.
+
+No application backend or cloud account is needed. Public signaling relays and STUN/optional TURN still connect devices. Devices must be online together for delivery; group messages are bounded to the latest 300 on each device. This version has no member revocation or verified individual accounts. Pair backups do not include group history. Changing the Vercel domain creates a separate browser storage origin.
+
+Android users can enable **More → Connection → Stay reachable in background** and the battery exemption. Resume/network recovery now retries missing connections with a bounded backoff and preserves calls. Browser tabs can still be suspended; open does not mean continuously running. Fresh group messages use local notifications when permitted, with private previews while locked.
+
+See [the P2P scope and test checklist](docs/P2P-CONTRACT.md), [game contract](docs/PARTY-CONTRACT.md), and [background behavior](docs/BACKGROUND-CONTRACT.md). Real PC/phone calls and four-device network quality must be tested before public rollout.
+
 ## Support OnePair ☕
 
 OnePair is free, ad-free and open source. If you'd like to support development:

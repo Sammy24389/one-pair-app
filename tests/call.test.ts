@@ -150,3 +150,17 @@ it('disposes visibility subscription and rejects work after disposal', async () 
   expect(call.state.phase).toBe('idle')
   expect(stream.getTracks()[0].stop).toHaveBeenCalledOnce()
 })
+
+it('reports permission acquisition as busy before the outgoing phase exists', async () => {
+  const {call} = setup()
+  const pending = deferred<MediaStream>()
+  getUserMedia.mockReturnValueOnce(pending.promise)
+  expect(call.busy).toBe(false)
+  const starting = call.start(false)
+  expect(call.state.phase).toBe('idle')
+  expect(call.busy).toBe(true)
+  call.hangup()
+  expect(call.busy).toBe(false)
+  pending.resolve(media())
+  await starting
+})

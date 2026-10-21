@@ -7,6 +7,7 @@ import {iceServers} from './settings'
 import {getMedia, hasMedia, putMedia} from './idb'
 import {fromB64, todayKey, toHex, uid} from './util'
 import {CallController} from './call'
+import type {StatusRecord} from './status'
 import type {
   DailyEntry,
   DailyPhoto,
@@ -47,6 +48,7 @@ export class Space {
   readonly lists = this.doc.getMap<ListItem>('lists')
   readonly notes = this.doc.getMap<Note>('notes')
   readonly moods = this.doc.getMap<Mood>('moods')
+  readonly statuses = this.doc.getMap<StatusRecord>('statuses')
   readonly moodLog = this.doc.getArray<Mood & {by: string}>('moodLog')
   readonly daily = this.doc.getMap<DailyEntry>('daily')
   readonly photos = this.doc.getMap<DailyPhoto>('photos')
@@ -63,6 +65,10 @@ export class Space {
   version = 0
 
   private room: Room | null = null
+  private connectionGeneration = 0
+  private connecting: Promise<void> | null = null
+  private reconnecting: Promise<void> | null = null
+  private disposed = false
   private secret: Uint8Array
   private listeners = new Set<Listener>()
   private incoming = new Set<IncomingListener>()
@@ -128,12 +134,23 @@ export class Space {
 
   // ---------- networking ----------
 
-  async connect() {
-    if (this.room) return
+  connect(): Promise<void> {
+    if (this.disposed || this.room) return Promise.resolve()
+    if (this.connecting) return this.connecting
+    const generation = this.connectionGeneration
+    const pending = this.openRoom(generation).finally(() => {
+      if (this.connecting === pending) this.connecting = null
+    })
+    this.connecting = pending
+    return pending
+  }
+
+  private async openRoom(generation: number) {
     await this.ready
     const roomId = await hkdfHex(this.secret, 'room', 20)
     const password = await hkdfHex(this.secret, 'sdp', 32)
     const authKey = await hkdf(this.secret, 'auth')
+    if (this.disposed || generation !== this.connectionGeneration) return
     const me = this.me
     const peer = this.peer
 
@@ -208,6 +225,7 @@ export class Space {
     this.act.call.onMessage = msg => this.call.onSignal(msg)
 
     room.onPeerJoin = peerId => {
+      if (this.room !== room) return
       this.peerId = peerId
       this.conn = 'online'
       this.act.sv.send(Y.encodeStateVector(this.doc), {target: peerId})
@@ -216,7 +234,7 @@ export class Space {
       this.bump()
     }
     room.onPeerLeave = peerId => {
-      if (peerId !== this.peerId) return
+      if (this.room !== room || peerId !== this.peerId) return
       this.peerId = null
       this.peerTyping = false
       this.conn = 'searching'
@@ -224,7 +242,7 @@ export class Space {
       this.call.onPeerLeft()
       this.bump()
     }
-    room.onPeerStream = stream => this.call.onRemoteStream(stream)
+    room.onPeerStream = stream => { if (this.room === room) this.call.onRemoteStream(stream) }
   }
 
   /** Called when the partner re-paired from a new install (same space, new device id). */
@@ -234,6 +252,11 @@ export class Space {
   }
 
   async disconnect() {
+    this.connectionGeneration++
+    this.connecting = null
+    clearTimeout(this.needTimer)
+    clearTimeout(this.typingTimer)
+    this.requested.clear()
     this.call.hangup()
     const r = this.room
     this.room = null
@@ -243,9 +266,17 @@ export class Space {
     this.bump()
   }
 
-  async reconnect() {
-    await this.disconnect()
-    await this.connect()
+  reconnect(): Promise<void> {
+    if (this.disposed || this.call.busy || this.call.state.phase !== 'idle') return Promise.resolve()
+    if (this.reconnecting) return this.reconnecting
+    const pending = (async () => {
+      await this.disconnect()
+      await this.connect()
+    })().finally(() => {
+      if (this.reconnecting === pending) this.reconnecting = null
+    })
+    this.reconnecting = pending
+    return pending
   }
 
   get online() {
@@ -405,6 +436,7 @@ export class Space {
   }
 
   async destroy() {
+    this.disposed = true
     this.call.dispose()
     await this.disconnect()
     await this.persistence.destroy()

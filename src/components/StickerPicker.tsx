@@ -1,8 +1,8 @@
-import {useEffect, useRef, useState} from 'react'
+import {useEffect, useId, useRef, useState} from 'react'
 import {Plus, Trash2, X} from 'lucide-react'
 import {STICKERS} from '../lib/content'
 import {pickFiles} from '../lib/media'
-import {addSticker, getStickers, removeSticker, STICKER_ACCEPT, type SavedSticker} from '../lib/stickers'
+import {addSticker, getStickers, removeSticker, subscribeStickers, STICKER_ACCEPT, type SavedSticker} from '../lib/stickers'
 
 const Preview = ({sticker}: {sticker: SavedSticker}) => {
   const [url, setUrl] = useState('')
@@ -19,6 +19,8 @@ export default function StickerPicker({onSend, onEmoji, onClose}: {
   onEmoji: (emoji: string) => void
   onClose: () => void
 }) {
+  const id = useId()
+  const [tab, setTab] = useState<'stickers' | 'emoji'>('stickers')
   const [items, setItems] = useState<SavedSticker[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -29,11 +31,12 @@ export default function StickerPicker({onSend, onEmoji, onClose}: {
 
   useEffect(() => {
     let live = true
+    const unsubscribe = subscribeStickers(rows => {if (live) setItems(rows)})
     getStickers().then(rows => { if (live) setItems(rows) })
       .catch(() => { if (live) setError('Could not load stickers. Close the tray and try again.') })
       .finally(() => { if (live) setLoading(false) })
     panel.current?.querySelector<HTMLButtonElement>('button')?.focus()
-    return () => { live = false }
+    return () => { live = false; unsubscribe() }
   }, [])
 
   const run = async (action: () => Promise<void>) => {
@@ -49,12 +52,24 @@ export default function StickerPicker({onSend, onEmoji, onClose}: {
     <div ref={panel} className="sticker-picker" role="region" aria-label="Sticker library" aria-busy={busy || loading}
       onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}>
       <div className="row between">
-        <h3>Stickers</h3>
+        <h3>Emoji & stickers</h3>
         <div className="row">
-          {!!items.length && <button className="sticker-manage" disabled={busy} onClick={() => setManaging(v => !v)}>{managing ? 'Done' : 'Manage'}</button>}
+          {tab === 'stickers' && !!items.length && <button className="sticker-manage" disabled={busy} onClick={() => setManaging(v => !v)}>{managing ? 'Done' : 'Manage'}</button>}
           <button className="icon-btn" onClick={onClose} aria-label="Close stickers"><X size={18} /></button>
         </div>
       </div>
+      <div className="sticker-tabs" role="tablist" aria-label="Message picker">
+        {(['emoji', 'stickers'] as const).map(value => <button key={value} type="button" role="tab"
+          id={`${id}-${value}-tab`} aria-controls={`${id}-${value}-panel`} aria-selected={tab === value} tabIndex={tab === value ? 0 : -1}
+          onClick={() => setTab(value)} onKeyDown={event => {
+            if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+            event.preventDefault()
+            const next = event.key === 'Home' ? 'emoji' : event.key === 'End' ? 'stickers' : value === 'emoji' ? 'stickers' : 'emoji'
+            setTab(next)
+            document.getElementById(`${id}-${next}-tab`)?.focus()
+          }}>{value === 'emoji' ? 'Emoji' : 'Stickers'}</button>)}
+      </div>
+      <div role="tabpanel" id={`${id}-stickers-panel`} aria-labelledby={`${id}-stickers-tab`} hidden={tab !== 'stickers'}>
       <button className="btn ghost block" disabled={busy || loading} onClick={() => run(async () => {
         const [file] = await pickFiles(STICKER_ACCEPT)
         if (file) { setItems(await addSticker(file, file.name)); setManaging(false) }
@@ -70,8 +85,10 @@ export default function StickerPicker({onSend, onEmoji, onClose}: {
         </div>
       )}
       {managing && <p className="tiny muted">Removing a saved sticker keeps copies already sent in chat.</p>}
-      <h3 className="small">Emoji</h3>
+      </div>
+      <div role="tabpanel" id={`${id}-emoji-panel`} aria-labelledby={`${id}-emoji-tab`} hidden={tab !== 'emoji'}>
       <div className="sticker-emojis">{STICKERS.map(emoji => <button key={emoji} disabled={busy} onClick={() => onEmoji(emoji)} aria-label={`Send ${emoji}`}>{emoji}</button>)}</div>
+      </div>
     </div>
   )
 }

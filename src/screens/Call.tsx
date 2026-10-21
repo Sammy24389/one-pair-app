@@ -3,6 +3,7 @@ import {ChevronDown, Maximize2, Mic, MicOff, Phone, PhoneOff, SwitchCamera, Vide
 import {Avatar} from '../components/ui'
 import type {Space} from '../lib/space'
 import {cx, fmtDuration} from '../lib/util'
+import '../styles/call-pip.css'
 
 const MediaEl = ({stream, muted, className, video}: {stream: MediaStream | null; muted?: boolean; className?: string; video: boolean}) => {
   const ref = useRef<HTMLVideoElement & HTMLAudioElement>(null)
@@ -60,7 +61,7 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
       : s.remote ? fmtDuration((Date.now() - s.startedAt) / 1000) : 'Connecting…'
 
   return (
-    <div ref={root} className={cx('call', minimized && 'is-minimized')}
+    <div ref={root} className={cx('call', minimized && 'is-minimized', minimized && 'call-pip', localHasVideo && 'has-local-video')}
       inert={minimized && locked} aria-hidden={minimized && locked ? true : undefined}
       role={minimized ? 'region' : 'dialog'} aria-label={`Call with ${peer.name}`} aria-modal={minimized ? undefined : true}
       onKeyDown={e => {
@@ -81,10 +82,11 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
         {s.remote && <MediaEl key="remote" stream={s.remote} video={remoteHasVideo} className="remote" />}
         {localHasVideo && <MediaEl key="local" stream={s.local} muted video className={cx('local', s.facing === 'environment' && 'env')} />}
       </div>
+      {minimized && !remoteHasVideo && <div className="call-pip-placeholder"><Avatar p={peer} size={44} /><span>{peer.name}</span></div>}
       {minimized ? (
         <>
           <button className="call-return" onClick={onRestore} aria-label="Return to call">
-            <Phone size={20} />
+            <Phone size={16} />
             <span className="grow"><b className="ellipsis">{peer.name}</b><span className="small">{label} · Return to call</span></span>
             <Maximize2 size={18} />
           </button>

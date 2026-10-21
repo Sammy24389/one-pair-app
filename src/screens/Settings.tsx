@@ -364,11 +364,15 @@ const Connection = () => {
         </button>
       </div>
 
+      {!nativeBridge && <div className="card" style={{marginTop: 14}}>
+        <h3>Background reception</h3>
+        <p className="tiny muted">Keep this app or browser tab open to receive messages while connected. Browsers can suspend background tabs, especially on phones. Reopening the app reconnects automatically and catches up saved messages when the other device is online. Installing the web app does not guarantee background delivery.</p>
+      </div>}
       {nativeBridge && (
         <div className="card" style={{marginTop: 14}}>
           <h3>Reachability</h3>
           <p className="tiny muted">
-            With no server, your phone receives messages and calls only while OnePair is running. Keep it running in the background (a small silent notification) and let it ignore battery optimisation so Android doesn't pause it. Swiping OnePair away from recent apps stops it until you open it again.
+            Keep the background connection enabled to improve message and call reception while OnePair is running. The silent notification and unrestricted battery setting help, but Android or your phone maker can still suspend it. Messages catch up when both devices reconnect. Swiping OnePair away stops reception until you open it again.
           </p>
           <Row title="Stay reachable in background" sub={battery?.serviceRunning ? 'Running' : 'Off'}>
             <Switch checked={s.keepAlive} onChange={keepAlive => settings.set({keepAlive})} />

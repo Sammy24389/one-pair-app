@@ -4,6 +4,7 @@ import {FxLayer} from './components/Fx'
 import {Toasts, useMediaUrl} from './components/ui'
 import {dailyImageUrl, GRADIENTS} from './lib/content'
 import {identity} from './lib/identity'
+import {groupRegistry} from './lib/groups'
 import {goTab, nav, type Sub, type Tab} from './lib/nav'
 import {isNative, isSystemUiActive, onAppVisibility} from './lib/platform'
 import {lockState} from './lib/security'
@@ -14,6 +15,9 @@ import Home from './screens/Home'
 import Lock from './screens/Lock'
 import Onboarding from './screens/Onboarding'
 
+const Status = lazy(() => import('./screens/Status'))
+const Groups = lazy(() => import('./screens/Groups'))
+const GroupsCallOverlay = lazy(() => import('./screens/Groups').then(m => ({default: m.GroupsCallOverlay})))
 const Chat = lazy(() => import('./screens/Chat'))
 const Moments = lazy(() => import('./screens/Moments'))
 const Play = lazy(() => import('./screens/Play'))
@@ -116,6 +120,10 @@ const SubScreen = ({sub}: {sub: Sub}) => {
     case 'profile':
     case 'about':
       return <Settings page={sub} />
+    case 'status':
+      return <Status />
+    case 'groups':
+      return <Groups />
     case 'pair':
       return <Pair />
     case 'map':
@@ -154,6 +162,7 @@ const Shell = ({locked}: {locked: boolean}) => {
   // Land on the chosen start page whenever the main UI first appears (launch, or right after first pairing).
   useState(() => nav.get().stack.length === 0 && nav.set({tab: settings.get().startTab}))
   const {tab, stack} = nav.use()
+  const hasPairs = identity.use(value => value.pairs.length > 0)
   const sub = stack[stack.length - 1]
   const ids = useSpaceIds()
   const subscribeCalls = useCallback((f: () => void) => subscribeAll(f), [ids])
@@ -163,9 +172,10 @@ const Shell = ({locked}: {locked: boolean}) => {
   const callKey = calling ? `${calling.pair.id}:${calling.call.state.id}` : ''
   const minimized = !!calling && calling.call.state.phase !== 'incoming' && minimizedCall === callKey
   // Chat is a normal tab (tab bar visible) so people who open straight into it can see the other pages.
-  const fullscreen = !!sub
+  const fullscreen = !!sub || !hasPairs
   return (
     <div className="app">
+      <Suspense fallback={null}><GroupsCallOverlay locked={locked} /></Suspense>
       <Suspense fallback={null}>
         {calling && <CallOverlay key={callKey} space={calling} minimized={minimized} locked={locked}
           onMinimize={() => setMinimizedCall(callKey)} onRestore={() => setMinimizedCall(null)} />}
@@ -174,6 +184,8 @@ const Shell = ({locked}: {locked: boolean}) => {
         <Suspense fallback={<div className="screen" />}>
           {sub ? (
             <SubScreen key={sub} sub={sub} />
+          ) : !hasPairs ? (
+            <Groups />
           ) : tab === 'home' ? (
             <Home />
           ) : tab === 'chat' ? (
@@ -197,6 +209,9 @@ export default function App() {
   const dark = useDark()
   const onboarded = identity.use(i => i.onboarded)
   const hasPairs = identity.use(i => i.pairs.length > 0)
+  const hasGroups = groupRegistry.use(value => value.records.length > 0)
+  const route = nav.use()
+  const openingGroups = route.stack[route.stack.length - 1] === 'groups'
   const locked = lockState.use(l => l.locked)
   const [hidden, setHidden] = useState(false)
 
@@ -224,7 +239,7 @@ export default function App() {
       <Wallpaper dark={dark} />
       {!onboarded ? (
         <Onboarding />
-      ) : !hasPairs ? (
+      ) : !hasPairs && !hasGroups && !openingGroups ? (
         <Suspense fallback={null}>
           <Pair first />
         </Suspense>

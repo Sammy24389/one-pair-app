@@ -3,7 +3,7 @@ import {Blob as NodeBlob} from 'node:buffer'
 import {webcrypto} from 'node:crypto'
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 import {idbDel, idbGet, idbPut, idbUpdate, getMedia, putMedia} from '../src/lib/idb'
-import {addSticker, getStickers, prepareSticker, removeSticker, STICKER_COUNT, STICKER_INPUT_LIMIT, STICKER_LIMIT, validateStickerFile, type SavedSticker} from '../src/lib/stickers'
+import {addSticker, getStickers, prepareSticker, removeSticker, subscribeStickers, STICKER_COUNT, STICKER_INPUT_LIMIT, STICKER_LIMIT, validateStickerFile, type SavedSticker} from '../src/lib/stickers'
 
 const key = 'onepair.stickers.v1'
 const png = (seed = 1) => new Blob([new Uint8Array([137,80,78,71,13,10,26,10,seed])], {type: 'image/png'})
@@ -87,4 +87,17 @@ describe('sticker persistence', () => {
     expect(await idbGet('kv','counter')).toBe(10)
     await idbDel('kv','counter')
   })
+})
+
+it('notifies an open library after committed saves and removals and supports unsubscription', async () => {
+  const listener = vi.fn()
+  const off = subscribeStickers(listener)
+  const rows = await addSticker(png(), 'Received sticker')
+  expect(listener).toHaveBeenLastCalledWith(rows)
+  expect(await getStickers()).toEqual(rows)
+  await removeSticker(rows[0].id)
+  expect(listener).toHaveBeenLastCalledWith([])
+  off()
+  await addSticker(png(), 'Again')
+  expect(listener).toHaveBeenCalledTimes(2)
 })

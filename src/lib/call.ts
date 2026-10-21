@@ -1,4 +1,5 @@
 import type {Space} from './space'
+import {claimMedia, releaseMedia} from './media-lease'
 import {identity} from './identity'
 import {nativeBridge} from './native'
 import {notifyNow, pingPartner} from './notify'
@@ -66,6 +67,10 @@ export class CallController {
     })
   }
 
+  get busy() {
+    return this.acquiring || this.state.phase !== 'idle'
+  }
+
   private showCallNotification() {
     const name = this.space.peerProfile().name
     if (nativeBridge) nativeBridge.showCall({name, video: this.state.video}).catch(() => notifyNow(name, 'Incoming call'))
@@ -102,6 +107,10 @@ export class CallController {
       } else this.set({error: `${name} isn't reachable right now. They need OnePair running (it stays reachable in the background unless swiped away).`})
       return
     }
+    if (!claimMedia(this)) {
+      this.set({error: 'End your other call before starting this one.'})
+      return
+    }
     const generation = ++this.generation
     this.acquiring = true
     try {
@@ -119,6 +128,7 @@ export class CallController {
         this.finish()
       }, RING_TIMEOUT)
     } catch (e) {
+      if (generation === this.generation) releaseMedia(this)
       if (generation === this.generation && !this.disposed) this.set({error: `Couldn't access ${video ? 'camera/microphone' : 'microphone'}: ${(e as Error).message}`})
     } finally {
       if (generation === this.generation) this.acquiring = false
@@ -127,6 +137,10 @@ export class CallController {
 
   async accept() {
     if (this.disposed || this.acquiring || this.state.phase !== 'incoming') return
+    if (!claimMedia(this)) {
+      this.set({error: 'End your other call before answering this one.'})
+      return
+    }
     const generation = this.generation
     const {id, video} = this.state
     this.acquiring = true
@@ -321,6 +335,7 @@ export class CallController {
   }
 
   private finish() {
+    releaseMedia(this)
     this.generation++
     this.acquiring = false
     this.flipping = false

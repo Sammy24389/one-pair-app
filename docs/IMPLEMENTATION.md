@@ -31,7 +31,13 @@ live cross-network WebRTC or Android background-call reliability.
 Rollback: revert feature changes; existing messages and IndexedDB stores remain
 compatible. Local sticker-library data may remain unused after rollback.
 
-## Later phases
+## Previous cloud proposal (superseded on 2026-10-21)
+
+The user chose P2P-only delivery. The following cloud proposal is historical;
+see P2P-CONTRACT.md for the current scope. Unfinished cloud files are preserved
+in a git stash on codex/cloud-groups and are excluded from this build.
+
+### Original proposal
 
 1. Decision confirmed on 2026-10-20: reliable offline delivery and group features.
    Introduce authenticated membership and durable storage in a separate phase.
@@ -77,4 +83,5 @@ compatible. Local sticker-library data may remain unused after rollback.
   remaining real-device walkthrough. Two-device pairing/chat/calls, responsive
   rendering, and Android background behavior remain unverified.
 - No ESLint configuration exists; no lint success is claimed.
-- No push or deployment has been performed.
+- First delivery was merged to main in b91bd26 and verified on padi-blond.vercel.app.
+- The subsequent P2P additions are local until separately committed/published.

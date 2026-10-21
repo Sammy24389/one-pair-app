@@ -1,0 +1,18 @@
+# Usability corrections from device testing
+
+User outcomes: separate Emoji/Stickers tabs; obvious save-to-library on received image stickers; invite friends to multiplayer with a 12-character code; keep every call participant visible in a bottom-right panel while chatting. Group calls remain explicit opt-in with four-device mesh limit.
+
+Contract: preserve existing pair histories, sticker quotas and current group secrets. Invite codes advertise existing group invitation through a separate code-authenticated rendezvous, expire after 10 minutes and never replace the permanent 256-bit group secret. Inviter must be online. No backend, public directory or durable offline delivery. Existing long invitations remain compatible through a compatibility field. Joining does not acquire media.
+
+Design: two accessible tabs with keyboard navigation; only chosen panel visible. Each image sticker has a labeled Add to stickers action with waiting/success/error states. Multiplayer entry offers Start room and Join with code immediately. Calls use a fixed bottom-right responsive grid retaining exact media nodes, with restore/mute/end controls; compact panel stays above composer/tabbar and below app lock. Show placeholders for voice/camera-off participants. Avoid destroying streams when minimizing.
+
+Verification: tab and save interactions, short-code authentication/expiry/cancellation/input limits, legacy invitation compatibility, persistent video nodes across minimize/lock, participant counts, typecheck/fulltests/webbuild/Androidwebbuild. Browser screenshots and realphone flow remain required when browsercontrol is unavailable. No new packages, APIs, migrations or operating costs. Temporary tunnel/domain can expire independently of app health. Commit/deploy/APK remain gated by the user's test verification.
+
+
+Verified locally: typecheck and all 121 tests across 19 files pass. Web/PWA and Android web-assets builds pass; no APK was assembled. Tests cover tab separation/keyboard access, received-sticker saves and immediate library refresh, four persistent video tiles through minimize/lock, direct room access without a pair, code expiry, rejection of reflected authentication proofs, cancellation and pending-room cleanup. Local browser-control inventory is empty, so visual layout and real PC/phone invitation/media flow await the next device test.
+
+Background behavior remains conditional on platform scheduling. Room-only Android members now use the existing background preference/service and can explicitly enable message notifications from room Connection & notifications. No new backend, dependency, API or database was introduced. No commit or production deployment was performed.
+
+Bug causes: the old picker rendered images and emoji in one scrolling region; compact calls deliberately hid their media nodes; multiplayer exposed the serialized group record and gated the app on private pairing. Separate tab panels, visible compact video grids, and an expiring code exchange remove those frictions while preserving existing data. A private group still trusts its members and lacks revocation; local tests do not establish public-release readiness.
+
+Device acceptance: reload the rebuilt app on PC and phone; inspect Emoji/Stickers separately, save a received image then open its library, create a room and enter its code on the other device, join video calls on both and choose Keep chatting. Add third/fourth devices to test all conference tiles. Restore and end calls, check media indicators stop, and test an expired/wrong code and cancelled join. Pragmatist view: ready for another trusted-device test. Strict release view: require visual/mobile/network evidence before publishing.
