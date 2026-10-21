@@ -1,4 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
+import {GripVertical, Maximize2} from 'lucide-react'
+import {useFloatingCall} from '../components/useFloatingCall'
 import {TopBar} from '../components/ui'
 import {identity} from '../lib/identity'
 import PartyGames from '../components/PartyGames'
@@ -21,13 +23,15 @@ export function GroupsCallOverlay({locked = false}: {locked?: boolean}) {
   const [expanded, setExpanded] = useState(true)
   const [muted, setMuted] = useState(false)
   const [cameraOff, setCameraOff] = useState(false)
+  const root = useRef<HTMLDivElement>(null)
+  const floating = useFloatingCall(root, !!group && !expanded && !locked)
   useEffect(() => {setMuted(false); setCameraOff(false)}, [group?.local])
   if (!group) return null
   const remoteIds = [...new Set([...group.remote.keys(), ...(group.callers ?? [])])]
-  return <div className={`group-call ${expanded ? '' : 'call-pip'}`} role="region" aria-label={`Group call: ${group.record.title}`}
-    inert={locked || undefined} aria-hidden={locked || undefined} style={{visibility: locked ? 'hidden' : 'visible'}}>
-    <div className="group-call-heading"><strong>{group.record.title} · {group.joining ? 'Connecting…' : 'Group call'}</strong>
-      <button className="btn" aria-label={expanded ? 'Minimize' : 'Expand'} onClick={() => setExpanded(!expanded)}>{expanded ? 'Keep chatting' : 'Expand'}</button></div>
+  return <div ref={root} className={`group-call ${expanded ? '' : 'call-pip'}`} role="region" aria-label={`Group call: ${group.record.title}`}
+    inert={locked || undefined} aria-hidden={locked || undefined} style={{...floating.style, visibility: locked ? 'hidden' : 'visible'}}>
+    <div className="group-call-heading">{expanded ? <strong>{group.record.title} · {group.joining ? 'Connecting…' : 'Group call'}</strong> : <button className="call-drag-handle" aria-label="Move group call window" title="Drag to move. Use arrow keys to reposition; Home to reset." {...floating.handle}><GripVertical size={16} /><span><b>{group.record.title}</b><small>{remoteIds.length + (group.local ? 1 : 0)} participants</small></span></button>}
+      <button className="btn" aria-label={expanded ? 'Minimize' : 'Expand'} onClick={() => setExpanded(!expanded)}>{expanded ? 'Keep chatting' : <Maximize2 size={18} />}</button></div>
     <div className="group-call-grid">
       {group.local && <div className={`group-participant ${cameraOff ? 'camera-off' : ''}`}><span>You</span><Stream stream={group.local} muted />{cameraOff && <span className="group-camera-off">Camera off</span>}</div>}
       {remoteIds.map(id => <div className="group-participant" key={id}>

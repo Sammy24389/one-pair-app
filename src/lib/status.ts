@@ -3,7 +3,20 @@ import {uid} from './util'
 export const STATUS_LIFETIME = 24 * 60 * 60 * 1000
 export const STATUS_TEXT_LIMIT = 500
 export const STATUS_ACTIVE_LIMIT = 5
-export type StatusRecord = {id: string; from: string; text: string; ts: number}
+export const STATUS_IMAGE_LIMIT = 10 * 1024 * 1024
+export const STATUS_VIDEO_LIMIT = 25 * 1024 * 1024
+export type StatusMedia = {kind: 'image' | 'video'; mediaId: string; mime: string; size: number}
+export type StatusRecord = {id: string; from: string; text: string; ts: number} & Partial<StatusMedia>
+
+export function validateStatusMedia(media: StatusMedia) {
+  const allowed = media.kind === 'image' ? ['image/jpeg', 'image/png', 'image/webp'] : media.kind === 'video' ? ['video/mp4', 'video/webm'] : []
+  const limit = media.kind === 'image' ? STATUS_IMAGE_LIMIT : STATUS_VIDEO_LIMIT
+  if (!allowed.includes(media.mime) || !Number.isSafeInteger(media.size) || media.size <= 0 || media.size > limit ||
+      typeof media.mediaId !== 'string' || !media.mediaId || media.mediaId.length > 128) {
+    throw new Error('Choose a JPG, PNG or WebP photo up to 10 MB, or an MP4/WebM video up to 25 MB.')
+  }
+}
+
 type StatusMap = {
   values(): IterableIterator<StatusRecord>
   get(id: string): StatusRecord | undefined
@@ -16,8 +29,13 @@ export function validStatus(value: unknown): value is StatusRecord {
   const s = value as Partial<StatusRecord>
   return typeof s.id === 'string' && s.id.length > 0 && s.id.length <= 128 &&
     typeof s.from === 'string' && s.from.length > 0 && s.from.length <= 128 &&
-    typeof s.text === 'string' && s.text.trim().length > 0 && s.text.length <= STATUS_TEXT_LIMIT &&
+    typeof s.text === 'string' && s.text.length <= STATUS_TEXT_LIMIT && validContent(s) &&
     typeof s.ts === 'number' && Number.isSafeInteger(s.ts) && s.ts >= 0
+}
+
+function validContent(s: Partial<StatusRecord>) {
+  if (s.kind === undefined && s.mediaId === undefined && s.mime === undefined && s.size === undefined) return !!s.text?.trim()
+  try { validateStatusMedia(s as StatusMedia); return true } catch { return false }
 }
 
 export function activeStatuses(statuses: StatusMap, owners: string[], now = Date.now()) {
@@ -37,13 +55,14 @@ export function pruneStatuses(statuses: StatusMap, owner: string, now = Date.now
   }
 }
 
-export function postStatus(statuses: StatusMap, owner: string, text: string, now = Date.now()) {
+export function postStatus(statuses: StatusMap, owner: string, text: string, now = Date.now(), media?: StatusMedia, id = uid()) {
   const trimmed = text.trim()
-  if (!trimmed || text.length > STATUS_TEXT_LIMIT) throw new Error('Write a status of 1 to 500 characters.')
+  if ((!trimmed && !media) || text.length > STATUS_TEXT_LIMIT) throw new Error('Write a status of 1 to 500 characters.')
+  if (media) validateStatusMedia(media)
   if (!owner || owner.length > 128 || !Number.isSafeInteger(now) || now < 0) throw new Error('Status could not be published.')
   pruneStatuses(statuses, owner, now)
   if (activeStatuses(statuses, [owner], now).length >= STATUS_ACTIVE_LIMIT) throw new Error('You can share up to 5 active statuses. Delete one to add another.')
-  const status: StatusRecord = {id: uid(), from: owner, text: trimmed, ts: now}
+  const status: StatusRecord = {id, from: owner, text: trimmed, ts: now, ...media}
   statuses.set(status.id, status)
   return status
 }

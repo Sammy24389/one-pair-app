@@ -1,6 +1,6 @@
 import {useEffect, useId, useRef, useState} from 'react'
 import {Plus, Trash2, X} from 'lucide-react'
-import {STICKERS} from '../lib/content'
+import EmojiPicker from './EmojiPicker'
 import {pickFiles} from '../lib/media'
 import {addSticker, getStickers, removeSticker, subscribeStickers, STICKER_ACCEPT, type SavedSticker} from '../lib/stickers'
 
@@ -87,7 +87,7 @@ export default function StickerPicker({onSend, onEmoji, onClose}: {
       {managing && <p className="tiny muted">Removing a saved sticker keeps copies already sent in chat.</p>}
       </div>
       <div role="tabpanel" id={`${id}-emoji-panel`} aria-labelledby={`${id}-emoji-tab`} hidden={tab !== 'emoji'}>
-      <div className="sticker-emojis">{STICKERS.map(emoji => <button key={emoji} disabled={busy} onClick={() => onEmoji(emoji)} aria-label={`Send ${emoji}`}>{emoji}</button>)}</div>
+      {tab === 'emoji' && <EmojiPicker disabled={busy} onEmoji={onEmoji} />}
       </div>
     </div>
   )

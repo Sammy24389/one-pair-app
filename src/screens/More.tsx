@@ -42,7 +42,7 @@ export default function More() {
           <h3>Together</h3>
         </div>
         <div className="card" style={{paddingTop: 4, paddingBottom: 4}}>
-          <Row icon={Radio} title="Status" sub="Text updates that disappear after 24 hours" to="status" />
+          <Row icon={Radio} title="Status" sub="Text, photos and videos from all paired users" to="status" />
           <Row icon={Mail} title="Groups" sub="Group chat, calls and multiplayer games" to="groups" />
           <Row icon={ListChecks} title="Shared lists" sub="Bucket list, watchlist, ideas, wishlist" to="lists" />
           <Row icon={Mail} title="Letters & love jar" sub="Open-when letters, time capsules" to="notes" />

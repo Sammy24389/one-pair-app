@@ -1,0 +1,17 @@
+# Call panel and emoji corrections
+
+User outcome: a tidy movable call panel while chatting, and a complete searchable emoji catalogue. Reference: user phone screenshot, showing tightly cropped remote video and a large fixed panel overlapping chat.
+
+Design: compact dark call card with a 44px drag handle/identity header, separate expand action, contained remote portrait/landscape video, small local preview and 44px audio/camera/end controls. Preserve media elements through moving/minimizing/restoring/locking. Use the same drag behavior for group calls and keep every participant visible. Drag only from the labeled header; controls must never start a drag. Arrow keys provide a non-drag movement method; Home resets placement. Clamp to the visual viewport and safe-area edges on drag, orientation/resize and keyboard viewport changes. Initial position stays above composer/navigation. No automatic return to full screen on drag release.
+
+Emoji: searchable categorized full standardized set with names and sequences; retain emoji/sticker tabs and existing send behavior. Bundle local Unicode data; no runtime external image/CDN requests. Device fonts determine glyph support. Preserve current status-media edits.
+
+Affected layers: React UI, viewport/pointer events, local bundled catalogue and build/test assets. No backend/API/auth/schema/cloud storage changes. Runtime: existing Vercel and Capacitor. No call protocol or media acquisition changes. Do not deploy, commit or rebuild downloadable APK as part of this local implementation. Verify pointer/key movement, boundaries/resize, exact retained video nodes, call control behavior, emoji catalogue coverage/search, responsive screen and full checks. Real Android gesture and keyboard behavior remain a device check.
+
+Verification: all 143 tests across 23 files pass; typecheck passes. Drag regressions cover touch/mouse pointers, mismatched pointers, release/cancel, keyboard movement, resize/visual viewport and cleanup. Existing private/group playback tests retain exact video elements through minimize/restore/lock; movement also retains the playing node. Browser-tested real CallOverlay and StickerPicker in an isolated fixture with synthetic canvas streams at 390px width: actual pointer drag changed panel position, both videos played, portrait fit was contain, emoji search and selection worked, and there was no horizontal overflow. Real Android gestures and OS glyph/keyboard behavior still require device validation. Emoji data/version/source/license are documented in EMOJI-DATA.md. No dependencies changed; no ESLint configuration exists.
+
+Cause: the old mini-panel was fixed, tightly cropped remote portraits, and inherited obsolete CSS that could hide video or restore relative positioning depending on stylesheet order. Remove obsolete styles and retain rendered regression checks when changing CSS delivery. The former emoji picker used a small curated array; the new catalogue preserves complete Unicode sequences and bounds the initial rendered buttons for phone performance.
+
+Pragmatist view: ready for device testing with clearly separated drag and action controls. Strict view: verify small Android screens, keyboard/orientation changes and older font repertoires before release. No new deployment or downloadable APK has been produced for these local changes.
+
+Final checks: Android web-assets and production PWA builds pass; diff checks pass. The additional retained-video movement assertion passes with the targeted call/drag suite. No APK was assembled or uploaded.

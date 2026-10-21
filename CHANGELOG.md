@@ -7,6 +7,8 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 ## [Unreleased]
 
 ### Added
+- Searchable Unicode 17.0 emoji catalogue with categories, flags, skin tones and joined sequences.
+- Photo/video statuses with optional captions and a combined feed for all paired users.
 - Private multiplayer rooms with expiring 12-character invite codes and group calls for up to four devices.
 - Eight turn-based games: darts, word chain, basketball, paintball, four in a row, checkers, mancala, and cup pong.
 - Text statuses that expire after 24 hours and bounded background reconnection.
@@ -17,6 +19,7 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 - Web regression tests for call lifecycle, call UI, sticker storage, and sticker picker, enforced in CI.
 
 ### Fixed
+- Compact call framing and controls, with draggable private/group call panels and viewport bounds.
 - Stop late media permission results from reviving ended calls or leaving camera/microphone tracks open.
 - Release call visibility subscriptions and late wake locks when their owners are destroyed.
 - Subscribe to incoming calls for pairs added while the app is already open.

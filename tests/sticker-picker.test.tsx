@@ -124,3 +124,12 @@ it('separates Emoji and Stickers panels and supports keyboard tab switching', as
   expect(document.activeElement).toBe(screen.getByRole('tab', {name: 'Stickers'}))
   expect(screen.getByRole('tabpanel', {name: 'Stickers'})).toBeTruthy()
 })
+
+it('sends a complete emoji from the searchable Emoji tab', async () => {
+  const {onEmoji} = setup()
+  await screen.findByText(/Your saved stickers will appear here/)
+  fireEvent.click(screen.getByRole('tab', {name: 'Emoji'}))
+  fireEvent.change(screen.getByLabelText('Search emoji'), {target: {value: 'flag Nigeria'}})
+  fireEvent.click(screen.getByRole('button', {name: 'Send flag: Nigeria'}))
+  expect(onEmoji).toHaveBeenCalledWith(String.fromCodePoint(0x1f1f3, 0x1f1ec))
+})

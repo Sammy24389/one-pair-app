@@ -1,5 +1,6 @@
 import {useEffect, useRef, useState} from 'react'
-import {ChevronDown, Maximize2, Mic, MicOff, Phone, PhoneOff, SwitchCamera, Video, VideoOff} from 'lucide-react'
+import {ChevronDown, GripVertical, Maximize2, Mic, MicOff, Phone, PhoneOff, SwitchCamera, Video, VideoOff} from 'lucide-react'
+import {useFloatingCall} from '../components/useFloatingCall'
 import {Avatar} from '../components/ui'
 import type {Space} from '../lib/space'
 import {cx, fmtDuration} from '../lib/util'
@@ -24,6 +25,7 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
   const peer = space.peerProfile()
   const [, tick] = useState(0)
   const root = useRef<HTMLDivElement>(null)
+  const floating = useFloatingCall(root, minimized && !locked)
 
   useEffect(() => {
     if (s.phase !== 'active') return
@@ -47,7 +49,7 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
   useEffect(() => {
     if (minimized && locked) return
     const previous = document.activeElement as HTMLElement | null
-    root.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    root.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
     return () => {
       if (previous?.isConnected) previous.focus()
     }
@@ -62,6 +64,7 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
 
   return (
     <div ref={root} className={cx('call', minimized && 'is-minimized', minimized && 'call-pip', localHasVideo && 'has-local-video')}
+      style={floating.style}
       inert={minimized && locked} aria-hidden={minimized && locked ? true : undefined}
       role={minimized ? 'region' : 'dialog'} aria-label={`Call with ${peer.name}`} aria-modal={minimized ? undefined : true}
       onKeyDown={e => {
@@ -77,6 +80,12 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
         if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus() }
         else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
       }}>
+      <div className="call-pip-heading" hidden={!minimized}>
+        <button className="call-drag-handle" disabled={!minimized} aria-label="Move call window" title="Drag to move. Use arrow keys to reposition; Home to reset." {...floating.handle}>
+          <GripVertical size={16} /><span><b>{peer.name}</b><small>{label}</small></span>
+        </button>
+        <button className="call-pip-expand" disabled={!minimized} onClick={onRestore} aria-label="Return to call"><Maximize2 size={18} /></button>
+      </div>
       {/* These elements stay mounted when the call collapses, so remote audio keeps playing. */}
       <div className="call-media" aria-hidden="true">
         {s.remote && <MediaEl key="remote" stream={s.remote} video={remoteHasVideo} className="remote" />}
@@ -84,17 +93,13 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
       </div>
       {minimized && !remoteHasVideo && <div className="call-pip-placeholder"><Avatar p={peer} size={44} /><span>{peer.name}</span></div>}
       {minimized ? (
-        <>
-          <button className="call-return" onClick={onRestore} aria-label="Return to call">
-            <Phone size={16} />
-            <span className="grow"><b className="ellipsis">{peer.name}</b><span className="small">{label} · Return to call</span></span>
-            <Maximize2 size={18} />
-          </button>
+        <div className="call-pip-controls">
           <button className={cx('cbtn', s.muted && 'on')} onClick={() => space.call.toggleMute()} aria-label={s.muted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={s.muted}>
-            {s.muted ? <MicOff /> : <Mic />}
+            {s.muted ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
-          <button className="cbtn end" onClick={() => space.call.hangup()} aria-label="End call"><PhoneOff /></button>
-        </>
+          {!!s.local?.getVideoTracks().length && <button className={cx('cbtn', s.camOff && 'on')} onClick={() => space.call.toggleCamera()} aria-label={s.camOff ? 'Turn on camera' : 'Turn off camera'} aria-pressed={!s.camOff}>{s.camOff ? <VideoOff size={20} /> : <Video size={20} />}</button>}
+          <button className="cbtn end" onClick={() => space.call.hangup()} aria-label="End call"><PhoneOff size={20} /></button>
+        </div>
       ) : (
         <>
           {s.phase !== 'incoming' && <button className="call-minimize" onClick={onMinimize} aria-label="Minimize call"><ChevronDown size={20} />Keep chatting</button>}
