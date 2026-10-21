@@ -5,7 +5,7 @@ import {Avatar, EmojiPicker, Seg, Sheet, StartPagePicker, Switch, TopBar} from '
 import {dailyImageUrl, GRADIENTS} from '../lib/content'
 import {exportBackup, importBackup} from '../lib/backup'
 import {identity, removePair, type Mode} from '../lib/identity'
-import {avatarFromFile, compressImage, pickFiles} from '../lib/media'
+import {compressImage, pickFiles} from '../lib/media'
 import {goTab, type Sub} from '../lib/nav'
 import {ensureNotifyPermission, ntfyTopicFor, toast} from '../lib/notify'
 import {isNative, onAppVisibility} from '../lib/platform'
@@ -15,6 +15,7 @@ import {ACCENTS, COMMUNITY_TURN, iceServers, settings, type IceServer, type Lock
 import {getSpace, reconnectAll, useActiveSpace, useSpaceIds, useSpaceVersion} from '../lib/spaces'
 import {cx, todayKey} from '../lib/util'
 import {putMedia} from '../lib/idb'
+import {prepareProfileMedia} from '../lib/profile-media'
 
 declare const __APP_VERSION__: string
 
@@ -32,16 +33,24 @@ const Row = ({title, sub, children}: {title: string; sub?: string; children: Rea
 
 const Profile = () => {
   const {profile, code} = identity.use()
-  const set = (p: Partial<typeof profile>) => identity.set({profile: {...profile, ...p}})
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const set = (p: Partial<typeof profile>) => identity.set(s => ({profile: {...s.profile, ...p}}))
   return (
     <>
       <TopBar title="Profile" />
       <div className="card col" style={{alignItems: 'center'}}>
         <button
           style={{position: 'relative'}}
+          aria-label="Choose profile photo or video"
+          disabled={busy}
           onClick={async () => {
-            const [f] = await pickFiles('image/*')
-            if (f) set({avatar: await avatarFromFile(f)})
+            setBusy(true); setError('')
+            try {
+              const [f] = await pickFiles('image/jpeg,image/png,image/webp,image/gif,image/avif,video/mp4,video/webm')
+              if (f) set(await prepareProfileMedia(f))
+            } catch (e) {setError(e instanceof Error ? e.message : 'Could not save profile media.')}
+            finally {setBusy(false)}
           }}
         >
           <Avatar p={profile} size={96} />
@@ -49,15 +58,18 @@ const Profile = () => {
             <Camera size={16} />
           </span>
         </button>
-        {profile.avatar && (
-          <button className="small muted" onClick={() => set({avatar: undefined})}>
-            Remove photo
+        {(profile.avatar || profile.avatarMedia) && (
+          <button className="btn ghost" disabled={busy} onClick={() => set({avatar: undefined, avatarMedia: undefined})}>
+            Remove photo / video
           </button>
         )}
-        <input className="input" value={profile.name} maxLength={32} onChange={e => set({name: e.target.value})} placeholder="Name" />
+        <div className="tiny muted">Photos up to 10 MB · Videos up to 5 MB, 15 seconds, 720p</div>
+        {busy && <div role="status">Preparing profile media…</div>}
+        {error && <div role="alert">{error}</div>}
+        <input aria-label="Name" className="input" value={profile.name} maxLength={32} onChange={e => set({name: e.target.value})} placeholder="Name" />
       </div>
       <div className="card" style={{marginTop: 14}}>
-        <EmojiPicker value={profile.emoji} onChange={emoji => set({emoji, avatar: undefined})} />
+        <EmojiPicker value={profile.emoji} onChange={emoji => {if (!busy) set({emoji, avatar: undefined, avatarMedia: undefined})}} />
       </div>
       <div className="card" style={{marginTop: 14}}>
         <div className="small muted">Your pairing code</div>

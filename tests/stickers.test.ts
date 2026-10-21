@@ -3,7 +3,7 @@ import {Blob as NodeBlob} from 'node:buffer'
 import {webcrypto} from 'node:crypto'
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest'
 import {idbDel, idbGet, idbPut, idbUpdate, getMedia, putMedia} from '../src/lib/idb'
-import {addSticker, getStickers, prepareSticker, removeSticker, subscribeStickers, STICKER_COUNT, STICKER_INPUT_LIMIT, STICKER_LIMIT, validateStickerFile, type SavedSticker} from '../src/lib/stickers'
+import {addSticker, inspectSticker, getStickers, prepareSticker, removeSticker, subscribeStickers, STICKER_COUNT, STICKER_LIBRARY_LIMIT, STICKER_INPUT_LIMIT, STICKER_LIMIT, validateStickerFile, type SavedSticker} from '../src/lib/stickers'
 
 const key = 'onepair.stickers.v1'
 const png = (seed = 1) => new Blob([new Uint8Array([137,80,78,71,13,10,26,10,seed])], {type: 'image/png'})
@@ -23,11 +23,10 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('sticker validation and preparation', () => {
-  it('rejects SVG, GIF, empty, oversized, and disguised files before decoding', async () => {
-    await expect(validateStickerFile(new Blob(['<svg/>'], {type:'image/svg+xml'}))).rejects.toThrow('PNG, JPEG, or WebP')
-    await expect(validateStickerFile(new Blob(['GIF89a'], {type:'image/gif'}))).rejects.toThrow('PNG, JPEG, or WebP')
-    await expect(validateStickerFile(new Blob([], {type:'image/png'}))).rejects.toThrow('2 MB')
-    await expect(validateStickerFile(new Blob([new Uint8Array(STICKER_INPUT_LIMIT + 1)], {type:'image/png'}))).rejects.toThrow('2 MB')
+  it('rejects SVG, empty, oversized, and disguised files before decoding', async () => {
+    await expect(validateStickerFile(new Blob(['<svg/>'], {type:'image/svg+xml'}))).rejects.toThrow('PNG, JPEG, WebP')
+    await expect(validateStickerFile(new Blob([], {type:'image/png'}))).rejects.toThrow('10 MB')
+    await expect(validateStickerFile(new Blob([new Uint8Array(STICKER_INPUT_LIMIT + 1)], {type:'image/png'}))).rejects.toThrow('10 MB')
     await expect(validateStickerFile(new Blob(['not png'], {type:'image/png'}))).rejects.toThrow('not a valid')
     expect(createImageBitmap).not.toHaveBeenCalled()
   })
@@ -76,7 +75,7 @@ describe('sticker persistence', () => {
     await idbPut('kv', key, rows)
     await expect(addSticker(png())).rejects.toThrow('library is full')
     expect(await getStickers()).toHaveLength(STICKER_COUNT)
-    await idbPut('kv', key, rows.slice(0,16).map(s => ({...s,blob:new Blob([new Uint8Array(STICKER_LIMIT)],{type:'image/png'})})))
+    await idbPut('kv', key, rows.slice(0,16).map(s => ({...s,blob:new Blob([new Uint8Array(STICKER_LIBRARY_LIMIT / 16)],{type:'image/png'})})))
     await expect(addSticker(png())).rejects.toThrow('library is full')
     expect(await getStickers()).toHaveLength(16)
   })
@@ -100,4 +99,44 @@ it('notifies an open library after committed saves and removals and supports uns
   off()
   await addSticker(png(), 'Again')
   expect(listener).toHaveBeenCalledTimes(2)
+})
+
+it('preserves GIF and animated WebP/PNG bytes and infers missing file MIME',async()=>{
+  const formats = [new Blob(['GIF89a'],{type:'image/gif'}),new Blob(['RIFF0000WEBPANIM',new Uint8Array(4)]),new Blob([new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,0]),'acTL',new Uint8Array(4)],{type:'image/png'})]
+  for (const file of formats) {
+    vi.mocked(createImageBitmap).mockResolvedValueOnce({width:512,height:256,close} as unknown as ImageBitmap)
+    expect((await inspectSticker(file)).kind).toBe('animated')
+    const prepared = await prepareSticker(file)
+    expect(prepared.kind).toBe('animated')
+    expect(await prepared.blob.arrayBuffer()).toEqual(await file.arrayBuffer())
+  }
+  expect(HTMLCanvasElement.prototype.toBlob).not.toHaveBeenCalled()
+  await expect(inspectSticker(new Blob(['GIF89a',new Uint8Array(2*1024*1024)],{type:'image/gif'}))).rejects.toThrow('2 MB')
+  await expect(prepareSticker(new Blob(['GIF89a'],{type:'image/gif'}))).rejects.toThrow('512 by 512')
+})
+it('validates video metadata and releases media URLs on success, failure, and timeout',async()=>{
+  vi.useFakeTimers()
+  const create = document.createElement.bind(document), videos: HTMLVideoElement[] = []
+  vi.spyOn(document,'createElement').mockImplementation(((tag:string)=>{
+    const el=create(tag)
+    if(tag==='video') {videos.push(el as HTMLVideoElement);Object.defineProperties(el,{videoWidth:{value:512},videoHeight:{value:512},duration:{value:5,configurable:true}})}
+    return el
+  }) as typeof document.createElement)
+  vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{})
+  URL.createObjectURL=vi.fn(()=> 'blob:video');URL.revokeObjectURL=vi.fn()
+  const file=new Blob([new Uint8Array(4),'ftypisom'],{type:'video/mp4'})
+  const pending=prepareSticker(file);await vi.advanceTimersByTimeAsync(1);videos[0].dispatchEvent(new Event('loadedmetadata'))
+  expect(await pending).toEqual({blob:file,w:512,h:512,kind:'video'})
+  const invalid=prepareSticker(file);const rejected=expect(invalid).rejects.toThrow('15 seconds');await vi.advanceTimersByTimeAsync(1)
+  Object.defineProperty(videos[1],'duration',{value:16});videos[1].dispatchEvent(new Event('loadedmetadata'));await rejected
+  const timeout=expect(prepareSticker(file)).rejects.toThrow('could not be opened');await vi.advanceTimersByTimeAsync(10001);await timeout
+  expect(URL.revokeObjectURL).toHaveBeenCalledTimes(3)
+  await expect(inspectSticker(new Blob([new Uint8Array(4),'ftyp',new Uint8Array(5*1024*1024)],{type:'video/mp4'}))).rejects.toThrow('5 MB')
+  vi.useRealTimers()
+})
+
+it('recognizes a generic Android WebP file by its bytes',async()=>{
+  const {inspectSticker}=await import('../src/lib/stickers')
+  const bytes=new Uint8Array(12);bytes.set([82,73,70,70],0);bytes.set([87,69,66,80],8)
+  expect(await inspectSticker(new Blob([bytes],{type:'application/octet-stream'}))).toEqual({kind:'image',mime:'image/webp'})
 })

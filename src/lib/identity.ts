@@ -3,7 +3,7 @@ import {randomCode, uid} from './util'
 
 export type Mode = 'friends' | 'couple'
 
-export type Profile = {name: string; emoji: string; avatar?: string}
+export type Profile = {name: string; emoji: string; avatar?: string; avatarMedia?: {id: string; mime: string; size: number}}
 
 export type PairRecord = {
   id: string // public pair id (derived from secret), also the Yjs doc name

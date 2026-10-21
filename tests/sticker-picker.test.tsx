@@ -2,8 +2,9 @@ import {afterEach, beforeEach, expect, it, vi} from 'vitest'
 import {act, cleanup, fireEvent, render, screen, waitFor} from '@testing-library/react'
 import StickerPicker from '../src/components/StickerPicker'
 import type {SavedSticker} from '../src/lib/stickers'
-const mocks = vi.hoisted(() => ({get: vi.fn(), add: vi.fn(), remove: vi.fn(), pick: vi.fn()}))
-vi.mock('../src/lib/stickers', () => ({getStickers: mocks.get, addSticker: mocks.add, removeSticker: mocks.remove, subscribeStickers: () => () => {}, STICKER_ACCEPT: 'image/png,image/jpeg,image/webp'}))
+const mocks = vi.hoisted(() => ({get: vi.fn(), add: vi.fn(), remove: vi.fn(), pick: vi.fn(), inspect: vi.fn()}))
+vi.mock('../src/lib/stickers', () => ({getStickers: mocks.get, addSticker: mocks.add, removeSticker: mocks.remove, inspectSticker: mocks.inspect, subscribeStickers: () => () => {}, STICKER_ACCEPT: 'image/png,image/jpeg,image/webp'}))
+vi.mock('../src/components/ImageCropper', () => ({default: ({onOriginal,onSave,onCancel}: {onOriginal:()=>Promise<void>;onSave:(blob:Blob)=>Promise<void>;onCancel:()=>void}) => <div role="dialog" aria-label="Crop sticker"><button onClick={onOriginal}>Keep full image</button><button onClick={()=>onSave(new Blob(['crop'],{type:'image/png'}))}>Crop and add</button><button onClick={onCancel}>Cancel crop</button></div>}))
 vi.mock('../src/lib/media', () => ({pickFiles: mocks.pick}))
 const sticker: SavedSticker = {id: 'one', name: 'Happy cat', blob: new Blob(['image'], {type: 'image/webp'}), w: 64, h: 64}
 function deferred<T>() {
@@ -21,6 +22,7 @@ beforeEach(() => {
   vi.resetAllMocks()
   mocks.get.mockResolvedValue([])
   mocks.pick.mockResolvedValue([])
+  mocks.inspect.mockResolvedValue({kind:'image',mime:'image/png'})
   vi.stubGlobal('URL', class extends URL {
     static createObjectURL = vi.fn(() => 'blob:sticker-preview')
     static revokeObjectURL = vi.fn()
@@ -32,11 +34,11 @@ it('shows loading before an empty library and enables image import afterward', a
   mocks.get.mockReturnValueOnce(pending.promise)
   setup()
   expect(screen.getByRole('status').textContent).toContain('Loading stickers')
-  expect((screen.getByRole('button', {name: 'Add image sticker'}) as HTMLButtonElement).disabled).toBe(true)
+  expect((screen.getByRole('button', {name: 'Add sticker'}) as HTMLButtonElement).disabled).toBe(true)
   await act(async () => { pending.resolve([]) })
   expect(screen.queryByRole('status')).toBeNull()
   expect(screen.getByText(/Your saved stickers will appear here/)).toBeTruthy()
-  expect((screen.getByRole('button', {name: 'Add image sticker'}) as HTMLButtonElement).disabled).toBe(false)
+  expect((screen.getByRole('button', {name: 'Add sticker'}) as HTMLButtonElement).disabled).toBe(false)
 })
 it('imports an image into the library and releases its preview URL on unmount', async () => {
   const file = new File(['png'], 'cat.png', {type: 'image/png'})
@@ -44,7 +46,10 @@ it('imports an image into the library and releases its preview URL on unmount', 
   mocks.add.mockResolvedValueOnce([sticker])
   const view = setup()
   await screen.findByText(/Your saved stickers will appear here/)
-  fireEvent.click(screen.getByRole('button', {name: 'Add image sticker'}))
+  fireEvent.click(screen.getByRole('button', {name: 'Add sticker'}))
+  await screen.findByRole('dialog', {name:'Crop sticker'})
+  expect(mocks.add).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'Keep full image'}))
   const preview = await screen.findByAltText('Happy cat')
   expect(preview.getAttribute('src')).toBe('blob:sticker-preview')
   expect(mocks.pick).toHaveBeenCalledWith('image/png,image/jpeg,image/webp')
@@ -55,12 +60,12 @@ it('imports an image into the library and releases its preview URL on unmount', 
 })
 it('shows invalid import errors and enables retry', async () => {
   mocks.pick.mockResolvedValueOnce([new File(['bad'], 'bad.txt')])
-  mocks.add.mockRejectedValueOnce(new Error('Choose a PNG, JPEG, or WebP image.'))
+  mocks.inspect.mockRejectedValueOnce(new Error('Choose a PNG, JPEG, or WebP image.'))
   setup()
   await screen.findByText(/Your saved stickers will appear here/)
-  fireEvent.click(screen.getByRole('button', {name: 'Add image sticker'}))
+  fireEvent.click(screen.getByRole('button', {name: 'Add sticker'}))
   expect((await screen.findByRole('alert')).textContent).toBe('Choose a PNG, JPEG, or WebP image.')
-  expect((screen.getByRole('button', {name: 'Add image sticker'}) as HTMLButtonElement).disabled).toBe(false)
+  expect((screen.getByRole('button', {name: 'Add sticker'}) as HTMLButtonElement).disabled).toBe(false)
 })
 it('sends only once while awaiting delivery and allows retry after failure', async () => {
   mocks.get.mockResolvedValueOnce([sticker])
@@ -118,7 +123,7 @@ it('separates Emoji and Stickers panels and supports keyboard tab switching', as
   expect(screen.queryByRole('tabpanel', {name: 'Emoji'})).toBeNull()
   const emoji = screen.getByRole('tab', {name: 'Emoji'})
   fireEvent.click(emoji)
-  expect(screen.queryByRole('button', {name: 'Add image sticker'})).toBeNull()
+  expect(screen.queryByRole('button', {name: 'Add sticker'})).toBeNull()
   expect(screen.getByRole('tabpanel', {name: 'Emoji'})).toBeTruthy()
   fireEvent.keyDown(emoji, {key: 'ArrowRight'})
   expect(document.activeElement).toBe(screen.getByRole('tab', {name: 'Stickers'}))
@@ -132,4 +137,21 @@ it('sends a complete emoji from the searchable Emoji tab', async () => {
   fireEvent.change(screen.getByLabelText('Search emoji'), {target: {value: 'flag Nigeria'}})
   fireEvent.click(screen.getByRole('button', {name: 'Send flag: Nigeria'}))
   expect(onEmoji).toHaveBeenCalledWith(String.fromCodePoint(0x1f1f3, 0x1f1ec))
+})
+
+it('adds animation without flattening it in the crop editor', async () => {
+  const file=new File(['gif'],'motion.gif',{type:'image/gif'})
+  mocks.pick.mockResolvedValueOnce([file]);mocks.inspect.mockResolvedValueOnce({kind:'animated',mime:'image/gif'});mocks.add.mockResolvedValueOnce([sticker])
+  setup();await screen.findByText(/Your saved stickers will appear here/)
+  fireEvent.click(screen.getByRole('button',{name:'Add sticker'}));await screen.findByAltText('Happy cat')
+  expect(screen.queryByRole('dialog')).toBeNull();expect(mocks.add).toHaveBeenCalledWith(file,'motion.gif')
+})
+it('cancels a crop without changing storage and supports saving a cropped image', async () => {
+  mocks.pick.mockResolvedValue([new File(['png'],'cat.png',{type:'image/png'})]);mocks.add.mockResolvedValue([sticker])
+  setup();await screen.findByText(/Your saved stickers will appear here/)
+  fireEvent.click(screen.getByRole('button',{name:'Add sticker'}));await screen.findByRole('dialog')
+  fireEvent.click(screen.getByRole('button',{name:'Cancel crop'}));expect(mocks.add).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button',{name:'Add sticker'}));await screen.findByRole('dialog')
+  fireEvent.click(screen.getByRole('button',{name:'Crop and add'}));await screen.findByAltText('Happy cat')
+  expect(mocks.add).toHaveBeenCalledWith(expect.objectContaining({type:'image/png'}),'cat.png')
 })

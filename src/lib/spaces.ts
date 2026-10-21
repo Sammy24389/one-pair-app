@@ -24,7 +24,7 @@ const ensure = (p: PairRecord) => {
       // Keep our profile in the shared doc up to date.
       const prof = identity.get().profile
       const cur = space.profiles.get(space.me)
-      if (!cur || cur.name !== prof.name || cur.emoji !== prof.emoji || cur.avatar !== prof.avatar) space.publishProfile(prof)
+      if (!cur || cur.name !== prof.name || cur.emoji !== prof.emoji || cur.avatar !== prof.avatar || JSON.stringify(cur.avatarMedia) !== JSON.stringify(prof.avatarMedia)) space.publishProfile(prof)
       space.connect()
     })
     hooks.forEach(f => f(space))
@@ -57,7 +57,7 @@ identity.subscribe(() => {
   const prof = identity.get().profile
   spaces.forEach(s => {
     const cur = s.profiles.get(s.me)
-    if (cur && (cur.name !== prof.name || cur.emoji !== prof.emoji || cur.avatar !== prof.avatar)) s.publishProfile(prof)
+    if (cur && (cur.name !== prof.name || cur.emoji !== prof.emoji || cur.avatar !== prof.avatar || JSON.stringify(cur.avatarMedia) !== JSON.stringify(prof.avatarMedia))) s.publishProfile(prof)
   })
 })
 

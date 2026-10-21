@@ -7,6 +7,9 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 ## [Unreleased]
 
 ### Added
+- Display photos and short profile videos, with on-device storage and pair media sync.
+- Sticker crop preview with zoom/position controls; preserved animated WebP/GIF/APNG and muted video stickers.
+- Manual WhatsApp sticker-file import guidance and generic Android file MIME detection.
 - Searchable Unicode 17.0 emoji catalogue with categories, flags, skin tones and joined sequences.
 - Photo/video statuses with optional captions and a combined feed for all paired users.
 - Private multiplayer rooms with expiring 12-character invite codes and group calls for up to four devices.

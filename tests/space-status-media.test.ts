@@ -61,3 +61,11 @@ it('preserves the existing chat attachment receive contract', async () => {
   await fixture.actions.get('media').onMessage(new Uint8Array(4), {metadata: {id: 'chat-media', mime: 'application/pdf', name: 'note.pdf'}})
   expect(fixture.stored).toHaveBeenCalledWith('chat-media', expect.any(Blob), 'note.pdf')
 })
+
+it('requests only valid member profile video references after remote sync',async()=>{
+  const remote=new Y.Doc(),profiles=remote.getMap('profiles')
+  profiles.set('peer',{name:'Peer',emoji:'P',avatarMedia:{id:'abcdefghijklmnop',mime:'video/mp4',size:4}})
+  profiles.set('stranger',{name:'Unknown',emoji:'X',avatarMedia:{id:'qrstuvwxyz012345',mime:'video/mp4',size:4}})
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote));await vi.advanceTimersByTimeAsync(1500)
+  expect(fixture.actions.get('need').send).toHaveBeenCalledWith(['abcdefghijklmnop'],{target:'connection'});remote.destroy()
+})
