@@ -55,7 +55,7 @@ export const initializeGroups = () => groupRegistry.get().records.forEach(getGro
 export const hasGroupCall = () => [...instances.values()].some(g => g.local !== null || g.joining)
 export const activeGroupCall = () => [...instances.values()].find(g => g.local !== null || g.joining)
 export const groupRecoveryTargets = () => [...instances.values()].map(group => ({
-  id: group.record.id, online: group.connected, busy: !!group.local || group.joining, reconnect: () => group.reconnect()
+  id: group.record.id, online: group.connected, busy: !!group.local || group.joining || !!group.presentation, reconnect: () => group.reconnect()
 }))
 export async function forgetGroup(id: string) {
   const group = instances.get(id)
@@ -108,7 +108,7 @@ export class PeerGroup {
     return task
   }
   async reconnect() {
-    if (this.disposed || this.connected || this.local || this.joining) return
+    if (this.disposed || this.connected || this.local || this.joining || this.presentation) return
     this.stopPresentation(); this.shared.clear(); this.remote.clear()
     ++this.connectionGeneration
     this.connecting = null

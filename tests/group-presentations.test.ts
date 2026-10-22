@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, expect, it, vi} from 'vitest'
-import {PeerGroup} from '../src/lib/groups'
+import {PeerGroup, getGroup, forgetGroup, groupRecoveryTargets} from '../src/lib/groups'
 import {joinRoom} from 'trystero'
 import {notifyNow, toast} from '../src/lib/notify'
 import {playNotificationTone} from '../src/lib/sound'
@@ -103,4 +103,26 @@ it.each(['locked','blur'] as const)('hides room and caller details for %s notifi
   expect(text).not.toContain('Friend');expect(text).not.toContain('Friends')
   const notice=vi.mocked(toast).mock.calls[0][0]
   expect(notice.body).not.toContain('Friend')
+})
+
+it('does not tear down a live screen/media presentation while reconnecting an offline room',async()=>{
+  const {group,room}=setup(),capture=media()
+  await group.present(capture.stream,'Shared screen');group.connected=false
+  await group.reconnect()
+  expect(group.presentation).toBe(capture.stream);expect(capture.track.stop).not.toHaveBeenCalled()
+  expect(room.leave).not.toHaveBeenCalled();expect(room.removeStream).not.toHaveBeenCalled()
+})
+it('marks offline presentation rooms busy so automatic recovery cannot select them',async()=>{
+  const {room}=setup(),id='recovery123456'
+  vi.mocked(joinRoom).mockReturnValue(room as never)
+  const group=getGroup({...record,id})
+  try {
+    await group.connect();const capture=media();await group.present(capture.stream,'Movie')
+    group.connected=false
+    const target=groupRecoveryTargets().find(item=>item.id===id)!
+    expect(target.online).toBe(false);expect(target.busy).toBe(true)
+    await target.reconnect();expect(capture.track.stop).not.toHaveBeenCalled()
+    group.stopPresentation()
+    expect(groupRecoveryTargets().find(item=>item.id===id)?.busy).toBe(false)
+  } finally {await forgetGroup(id)}
 })
