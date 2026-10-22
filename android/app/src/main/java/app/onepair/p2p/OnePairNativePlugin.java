@@ -10,6 +10,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.media.AudioAttributes;
+import android.media.projection.MediaProjectionManager;
+import android.os.Handler;
+import android.os.Looper;
+import java.util.concurrent.atomic.AtomicBoolean;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
@@ -53,6 +57,10 @@ public class OnePairNativePlugin extends Plugin {
     private static String pendingAction;
     private static String pendingRoute;
     private BroadcastReceiver declineReceiver;
+    private volatile PluginCall screenCall;
+    private volatile PluginCall screenStopCall;
+    private final Handler screenMain = new Handler(Looper.getMainLooper());
+    private final AtomicBoolean frameQueued = new AtomicBoolean();
 
     @Override
     public void load() {
@@ -82,6 +90,10 @@ public class OnePairNativePlugin extends Plugin {
             getContext().unregisterReceiver(declineReceiver);
         } catch (Exception ignored) {
         }
+        getContext().stopService(new Intent(getContext(), ScreenCaptureService.class));
+        ScreenCaptureService.listener = null;
+        if (screenCall != null) {screenCall.reject("Screen sharing closed."); screenCall = null;}
+        if (screenStopCall != null) {screenStopCall.reject("Screen sharing closed."); screenStopCall = null;}
         if (instance == this) instance = null;
     }
 
@@ -109,6 +121,35 @@ public class OnePairNativePlugin extends Plugin {
             nm.createNotificationChannel(c);
         }
         KeepAliveService.ensureChannel(ctx);
+    }
+
+    private static String safeTone(String value) {
+        return "bell".equals(value) || "soft".equals(value) || "silent".equals(value) ? value : "chime";
+    }
+
+    private static Uri toneSound(Context ctx, String tone) {
+        if ("silent".equals(tone)) return null;
+        String resource = "bell".equals(tone) ? "notification_bell" : "soft".equals(tone) ? "notification_soft" : "notification_chime";
+        return Uri.parse("android.resource://" + ctx.getPackageName() + "/raw/" + resource);
+    }
+
+    private static String toneChannel(Context ctx, boolean incomingCall, String tone) {
+        String id = (incomingCall ? "calls_v2_" : "messages_v2_") + tone;
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+            if (nm.getNotificationChannel(id) == null) {
+                NotificationChannel channel = new NotificationChannel(id, (incomingCall ? "Incoming calls" : "Messages & touches") + " - " + tone, NotificationManager.IMPORTANCE_HIGH);
+                channel.setDescription(incomingCall ? "Incoming peer calls using your selected tone" : "Messages, group invites and touches using your selected tone");
+                channel.setSound(toneSound(ctx, tone), new AudioAttributes.Builder()
+                    .setUsage(incomingCall ? AudioAttributes.USAGE_NOTIFICATION_RINGTONE : AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+                channel.enableVibration(!"silent".equals(tone));
+                if (incomingCall && !"silent".equals(tone)) channel.setVibrationPattern(new long[]{0, 800, 600, 800});
+                channel.setLockscreenVisibility(incomingCall ? Notification.VISIBILITY_PUBLIC : Notification.VISIBILITY_PRIVATE);
+                nm.createNotificationChannel(channel);
+            }
+        }
+        return id;
     }
 
     /** Called by MainActivity for launches/new intents (Answer action, full-screen call intent). */
@@ -164,7 +205,10 @@ public class OnePairNativePlugin extends Plugin {
         Context ctx = getContext();
         String body = call.getString("body", "");
         int id = call.getInt("id", (int) (System.currentTimeMillis() % 100000));
-        NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, CH_MESSAGES)
+        String tone = safeTone(call.getString("tone", "chime"));
+        NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, toneChannel(ctx, false, tone))
+            .setSound(toneSound(ctx, tone))
+            .setSilent("silent".equals(tone))
             .setSmallIcon(R.drawable.ic_stat_heart)
             .setColor(0xFFE8577E)
             .setContentTitle(call.getString("title", "OnePair"))
@@ -195,7 +239,10 @@ public class OnePairNativePlugin extends Plugin {
         PendingIntent ringing = activityIntent(3, "show");
 
         Person caller = new Person.Builder().setName(name).setImportant(true).build();
-        NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, CH_CALLS)
+        String tone = safeTone(call.getString("tone", "chime"));
+        NotificationCompat.Builder b = new NotificationCompat.Builder(ctx, toneChannel(ctx, true, tone))
+            .setSound(toneSound(ctx, tone))
+            .setSilent("silent".equals(tone))
             .setSmallIcon(R.drawable.ic_stat_heart)
             .setColor(0xFFE8577E)
             .setContentTitle(name)
@@ -211,11 +258,11 @@ public class OnePairNativePlugin extends Plugin {
             .setStyle(NotificationCompat.CallStyle.forIncomingCall(caller, declinePi, activityIntent(4, "answer")).setIsVideo(video));
         try {
             Notification n = b.build();
-            n.flags |= Notification.FLAG_INSISTENT; // keep ringing until answered/declined
+            if (!"silent".equals(tone)) n.flags |= Notification.FLAG_INSISTENT; // keep ringing until answered/declined
             // CallStyle needs to be attached to a foreground service to stay on screen – use the keep-alive one.
             if (!KeepAliveService.showRinging(ctx, n)) {
                 Notification standalone = b.setTimeoutAfter(50_000).build();
-                standalone.flags |= Notification.FLAG_INSISTENT;
+                if (!"silent".equals(tone)) standalone.flags |= Notification.FLAG_INSISTENT;
                 NotificationManagerCompat.from(ctx).notify(CALL_ID, standalone);
             }
             call.resolve();
@@ -235,7 +282,8 @@ public class OnePairNativePlugin extends Plugin {
         if (Build.VERSION.SDK_INT >= 26) {
             NotificationManager nm = getContext().getSystemService(NotificationManager.class);
             for (android.service.notification.StatusBarNotification sbn : nm.getActiveNotifications()) {
-                if (CH_MESSAGES.equals(sbn.getNotification().getChannelId())) nm.cancel(sbn.getTag(), sbn.getId());
+                String channel = sbn.getNotification().getChannelId();
+                if (CH_MESSAGES.equals(channel) || (channel != null && channel.startsWith("messages_v2_"))) nm.cancel(sbn.getTag(), sbn.getId());
             }
         }
         call.resolve();
@@ -309,6 +357,52 @@ public class OnePairNativePlugin extends Plugin {
                 call.reject("Could not save file: " + e.getMessage());
             }
         }).start();
+    }
+
+    @PluginMethod
+    public void startScreenCapture(PluginCall call) {
+        if (screenCall != null || ScreenCaptureService.active || screenStopCall != null) {call.reject("Stop your current screen share first."); return;}
+        screenCall = call;
+        try {
+            MediaProjectionManager manager = getContext().getSystemService(MediaProjectionManager.class);
+            startActivityForResult(call, manager.createScreenCaptureIntent(), "screenCaptureConsent");
+        } catch (Exception e) {screenCall = null; call.reject("Could not request screen sharing: " + e.getMessage());}
+    }
+    @ActivityCallback
+    private void screenCaptureConsent(PluginCall call, ActivityResult result) {
+        if (call == null || screenCall != call) return;
+        if (result.getResultCode() != Activity.RESULT_OK || result.getData() == null) {screenCall = null; call.reject("Screen sharing permission was cancelled."); return;}
+        ScreenCaptureService.listener = new ScreenCaptureService.Listener() {
+            @Override public void started(int width, int height) {screenMain.post(() -> {
+                if (screenCall != call) {getContext().stopService(new Intent(getContext(), ScreenCaptureService.class)); return;}
+                screenCall = null; JSObject data = new JSObject(); data.put("width", width); data.put("height", height); call.resolve(data);
+            });}
+            @Override public void frame(String jpeg, int width, int height) {
+                if (!frameQueued.compareAndSet(false, true)) return;
+                screenMain.post(() -> {try {
+                    if (instance != OnePairNativePlugin.this || !ScreenCaptureService.running) return;
+                    JSObject data = new JSObject(); data.put("data", jpeg); data.put("width", width); data.put("height", height);
+                    notifyListeners("screenFrame", data);
+                } finally {frameQueued.set(false);}});
+            }
+            @Override public void stopped(String reason) {screenMain.post(() -> {
+                if (screenCall == call) {screenCall = null; call.reject(reason);}
+                JSObject data = new JSObject(); data.put("reason", reason); notifyListeners("screenCaptureStopped", data);
+                if (screenStopCall != null) {screenStopCall.resolve(); screenStopCall = null;}
+            });}
+        };
+        try {
+            Intent intent = new Intent(getContext(), ScreenCaptureService.class).putExtra("consent", result.getData());
+            ContextCompat.startForegroundService(getContext(), intent);
+        } catch (Exception e) {screenCall = null; ScreenCaptureService.listener = null; call.reject("Could not start screen sharing: " + e.getMessage());}
+    }
+    @PluginMethod
+    public void stopScreenCapture(PluginCall call) {
+        if (screenStopCall != null) {call.reject("Screen sharing is already stopping."); return;}
+        if (screenCall != null) {screenCall.reject("Screen sharing cancelled."); screenCall = null;}
+        screenStopCall = call;
+        boolean stopped = getContext().stopService(new Intent(getContext(), ScreenCaptureService.class));
+        if (!stopped || !ScreenCaptureService.active) {screenStopCall = null; call.resolve();}
     }
 
     @PluginMethod

@@ -44,15 +44,24 @@ export const inspectSticker = async (file: Blob): Promise<{kind: StickerKind; mi
 export const validateStickerFile = async (file: Blob) => {await inspectSticker(file)}
 const videoDimensions = (blob: Blob) => new Promise<{w: number; h: number}>((resolve,reject) => {
   const video = document.createElement('video'), url = URL.createObjectURL(blob)
+  let settled = false
   const finish = (error?: string) => {
-    clearTimeout(timer); video.onloadedmetadata = null; video.onerror = null
+    if(settled)return
+    settled=true
+    clearTimeout(timer); video.onloadedmetadata = null; video.onseeked = null; video.onerror = null
     const w = video.videoWidth, h = video.videoHeight
     video.removeAttribute('src'); video.load(); URL.revokeObjectURL(url)
     if (error) reject(new Error(error)); else resolve({w,h})
   }
   const timer = setTimeout(() => finish('Video could not be opened. Try another MP4 or WebM.'),10000)
   video.preload = 'metadata'; video.muted = true; video.playsInline = true
-  video.onloadedmetadata = () => finish(!video.videoWidth || !video.videoHeight || Math.max(video.videoWidth,video.videoHeight) > 720 || !Number.isFinite(video.duration) || video.duration <= 0 || video.duration > 15 ? 'Video stickers must be up to 15 seconds and 720 by 720 pixels.' : undefined)
+  const check=(duration:number)=>finish(!video.videoWidth || !video.videoHeight || Math.max(video.videoWidth,video.videoHeight) > 720 || !Number.isFinite(duration) || duration <= 0 || duration > 15 ? 'Video stickers must be up to 15 seconds and 720 by 720 pixels.' : undefined)
+  video.onloadedmetadata = () => {
+    // MediaRecorder WebM files can omit the duration header. Probe their end,
+    // keeping the same timeout and validation as ordinary imported clips.
+    if(video.duration===Infinity){video.onseeked=()=>check(Number.isFinite(video.duration)?video.duration:video.currentTime);video.currentTime=1e10}
+    else check(video.duration)
+  }
   video.onerror = () => finish('Video could not be opened. Try another MP4 or WebM.')
   video.src = url
 })

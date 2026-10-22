@@ -31,11 +31,11 @@ it('searches across categories, preserves full ZWJ/skin-tone sequence and report
 })
 it('offers category browsing and bounded incremental display of all emoji', () => {
   render(<EmojiPicker onEmoji={vi.fn()} />)
-  fireEvent.change(screen.getByLabelText('Category'), {target: {value: 'all'}})
+  fireEvent.click(screen.getByRole('tab', {name:'All emoji'}))
   expect(screen.getByRole('status').textContent).toBe('120 of 3953 emoji')
   fireEvent.click(screen.getByRole('button', {name: 'Show more emoji'}))
   expect(screen.getByRole('status').textContent).toBe('240 of 3953 emoji')
-  fireEvent.change(screen.getByLabelText('Category'), {target: {value: '9'}})
+  fireEvent.click(screen.getByRole('tab', {name:data.groups[9]}))
   expect(screen.getByRole('button', {name: 'Send flag: Ascension Island'})).toBeTruthy()
   expect(screen.queryByRole('button', {name: 'Send grinning face'})).toBeNull()
 })
@@ -46,4 +46,14 @@ it('disables sending during an in-flight message', () => {
   expect(button.disabled).toBe(true)
   fireEvent.click(button)
   expect(send).not.toHaveBeenCalled()
+})
+
+it('uses direct category tabs with keyboard navigation and clears search on selection',()=>{
+  render(<EmojiPicker onEmoji={vi.fn()}/>)
+  fireEvent.change(screen.getByLabelText('Search emoji'),{target:{value:'heart'}})
+  const first=screen.getByRole('tab',{name:'All emoji'})
+  fireEvent.keyDown(first,{key:'End'})
+  expect(document.activeElement).toBe(screen.getByRole('tab',{name:data.groups[9]}))
+  expect((screen.getByLabelText('Search emoji') as HTMLInputElement).value).toBe('')
+  expect(screen.queryByRole('combobox')).toBeNull()
 })

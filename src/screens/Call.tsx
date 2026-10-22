@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react'
-import {ChevronDown, GripVertical, Maximize2, Mic, MicOff, Phone, PhoneOff, SwitchCamera, Video, VideoOff} from 'lucide-react'
+import {ChevronDown, GripVertical, Maximize2, MonitorUp, Mic, MicOff, Phone, PhoneOff, SwitchCamera, Video, VideoOff} from 'lucide-react'
 import {useFloatingCall} from '../components/useFloatingCall'
 import {Avatar} from '../components/ui'
 import type {Space} from '../lib/space'
@@ -56,7 +56,7 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
   }, [minimized, locked])
 
   const remoteHasVideo = !!s.remote?.getVideoTracks().some(t => t.readyState === 'live')
-  const localHasVideo = !!s.local?.getVideoTracks().length && !s.camOff
+  const localHasVideo = !!s.local?.getVideoTracks().length && (s.sharingScreen || !s.camOff)
   const label = s.phase === 'incoming'
     ? `Incoming ${s.video ? 'video' : 'voice'} call`
     : s.phase === 'outgoing' ? 'Ringing…'
@@ -89,7 +89,7 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
       {/* These elements stay mounted when the call collapses, so remote audio keeps playing. */}
       <div className="call-media" aria-hidden="true">
         {s.remote && <MediaEl key="remote" stream={s.remote} video={remoteHasVideo} className="remote" />}
-        {localHasVideo && <MediaEl key="local" stream={s.local} muted video className={cx('local', s.facing === 'environment' && 'env')} />}
+        {localHasVideo && <MediaEl key="local" stream={s.local} muted video className={cx('local', (s.sharingScreen || s.facing === 'environment') && 'env')} />}
       </div>
       {minimized && !remoteHasVideo && <div className="call-pip-placeholder"><Avatar p={peer} size={44} /><span>{peer.name}</span></div>}
       {minimized ? (
@@ -97,7 +97,8 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
           <button className={cx('cbtn', s.muted && 'on')} onClick={() => space.call.toggleMute()} aria-label={s.muted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={s.muted}>
             {s.muted ? <MicOff size={20} /> : <Mic size={20} />}
           </button>
-          {!!s.local?.getVideoTracks().length && <button className={cx('cbtn', s.camOff && 'on')} onClick={() => space.call.toggleCamera()} aria-label={s.camOff ? 'Turn on camera' : 'Turn off camera'} aria-pressed={!s.camOff}>{s.camOff ? <VideoOff size={20} /> : <Video size={20} />}</button>}
+          {s.sharingScreen && <button className="cbtn on" disabled={s.screenBusy} onClick={() => void space.call.stopScreenShare()} aria-label="Stop screen sharing"><MonitorUp size={20} /></button>}
+          {!s.sharingScreen && !!s.local?.getVideoTracks().length && <button className={cx('cbtn', s.camOff && 'on')} onClick={() => space.call.toggleCamera()} aria-label={s.camOff ? 'Turn on camera' : 'Turn off camera'} aria-pressed={!s.camOff}>{s.camOff ? <VideoOff size={20} /> : <Video size={20} />}</button>}
           <button className="cbtn end" onClick={() => space.call.hangup()} aria-label="End call"><PhoneOff size={20} /></button>
         </div>
       ) : (
@@ -105,7 +106,8 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
           {s.phase !== 'incoming' && <button className="call-minimize" onClick={onMinimize} aria-label="Minimize call"><ChevronDown size={20} />Keep chatting</button>}
           <div className="info">
             {!remoteHasVideo && <div className={cx(s.phase !== 'active' && 'pulse')}><Avatar p={peer} size={120} /></div>}
-            <h1>{peer.name}</h1><div>{label}</div>
+            <h1>{peer.name}</h1><div>{label}{s.sharingScreen ? " · Sharing screen" : ""}</div>
+            {s.error && <p role="alert" style={{maxWidth: 420, fontSize: 14}}>{s.error}</p>}
           </div>
           <div className="controls">
             {s.phase === 'incoming' ? (
@@ -116,12 +118,13 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
             ) : (
               <>
                 <button className={cx('cbtn', s.muted && 'on')} onClick={() => space.call.toggleMute()} aria-label={s.muted ? 'Unmute microphone' : 'Mute microphone'} aria-pressed={s.muted}>{s.muted ? <MicOff /> : <Mic />}</button>
-                {s.local?.getVideoTracks().length ? (
+                {!s.sharingScreen && s.local?.getVideoTracks().length ? (
                   <>
                     <button className={cx('cbtn', s.camOff && 'on')} onClick={() => space.call.toggleCamera()} aria-label={s.camOff ? 'Turn on camera' : 'Turn off camera'} aria-pressed={!s.camOff}>{s.camOff ? <VideoOff /> : <Video />}</button>
                     <button className="cbtn" onClick={() => space.call.flipCamera()} aria-label="Flip camera"><SwitchCamera /></button>
                   </>
-                ) : s.phase === 'active' && <button className="cbtn" onClick={() => space.call.enableVideo()} aria-label="Turn on video"><Video /></button>}
+                ) : !s.sharingScreen && s.phase === 'active' && <button className="cbtn" onClick={() => space.call.enableVideo()} aria-label="Turn on video"><Video /></button>}
+                {s.phase === 'active' && <button className={cx('cbtn', s.sharingScreen && 'on')} disabled={s.screenBusy} onClick={() => s.sharingScreen ? void space.call.stopScreenShare() : void space.call.shareScreen()} aria-label={s.sharingScreen ? 'Stop screen sharing' : 'Share screen'} title={s.sharingScreen ? 'Stop screen sharing' : 'Share screen'} aria-pressed={s.sharingScreen}><MonitorUp /></button>}
                 <button className="cbtn end" onClick={() => space.call.hangup()} aria-label="End call"><PhoneOff /></button>
               </>
             )}

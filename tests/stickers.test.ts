@@ -140,3 +140,21 @@ it('recognizes a generic Android WebP file by its bytes',async()=>{
   const bytes=new Uint8Array(12);bytes.set([82,73,70,70],0);bytes.set([87,69,66,80],8)
   expect(await inspectSticker(new Blob([bytes],{type:'application/octet-stream'}))).toEqual({kind:'image',mime:'image/webp'})
 })
+
+it('probes the end of duration-less recorder WebM before accepting it',async()=>{
+  vi.useFakeTimers()
+  const create=document.createElement.bind(document);let video:HTMLVideoElement
+  vi.spyOn(document,'createElement').mockImplementation(((tag:string)=>{
+    const el=create(tag)
+    if(tag==='video'){video=el as HTMLVideoElement;Object.defineProperties(el,{videoWidth:{value:512},videoHeight:{value:256},duration:{value:Infinity}})}
+    return el
+  }) as typeof document.createElement)
+  vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{})
+  URL.createObjectURL=vi.fn(()=> 'blob:recorder');URL.revokeObjectURL=vi.fn()
+  const file=new Blob([new Uint8Array([26,69,223,163,1])],{type:'video/webm'})
+  const pending=prepareSticker(file);await vi.advanceTimersByTimeAsync(1)
+  video!.dispatchEvent(new Event('loadedmetadata'));expect(video!.currentTime).toBe(1e10)
+  video!.currentTime=2;video!.dispatchEvent(new Event('seeked'))
+  expect(await pending).toMatchObject({w:512,h:256,kind:'video'});expect(URL.revokeObjectURL).toHaveBeenCalledOnce()
+  vi.useRealTimers()
+})

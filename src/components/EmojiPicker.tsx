@@ -3,6 +3,7 @@ import data from '../lib/emoji-data.json'
 import '../styles/emoji-picker.css'
 
 const PAGE_SIZE = 120
+const ICONS = ['😀','👋','🏽','🐻','🍎','🚗','⚽','💡','❤️','🏳️']
 
 export default function EmojiPicker({onEmoji, disabled = false}: {onEmoji: (emoji: string) => void; disabled?: boolean}) {
   const id = useId()
@@ -20,12 +21,20 @@ export default function EmojiPicker({onEmoji, disabled = false}: {onEmoji: (emoj
     <label htmlFor={`${id}-search`}>Search emoji</label>
     <input id={`${id}-search`} type="search" value={search} maxLength={100} placeholder="Try heart, flag or skin tone"
       onChange={event => {setSearch(event.target.value); setLimit(PAGE_SIZE)}} />
-    <label htmlFor={`${id}-category`}>Category</label>
-    <select id={`${id}-category`} value={category} disabled={!!search.trim()}
-      onChange={event => {setCategory(event.target.value); setLimit(PAGE_SIZE)}}>
-      <option value="all">All emoji</option>
-      {data.groups.map((group, index) => <option key={group} value={index}>{group}</option>)}
-    </select>
+    <div className="emoji-categories" role="tablist" aria-label="Emoji categories">
+      {['All emoji', ...data.groups].map((group, index) => {
+        const value = index ? String(index - 1) : 'all'
+        return <button type="button" role="tab" key={value} aria-label={group} title={group} aria-selected={!search.trim() && category === value}
+          onClick={() => {setCategory(value); setSearch(''); setLimit(PAGE_SIZE)}}
+          onKeyDown={event => {
+            if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return
+            event.preventDefault()
+            const buttons = event.currentTarget.parentElement!.querySelectorAll<HTMLButtonElement>('button')
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length
+            buttons[next].focus(); buttons[next].click()
+          }}>{index ? ICONS[index - 1] : '✦'}</button>
+      })}
+    </div>
     <p className="tiny muted" role="status">{matches.length ? `${Math.min(limit, matches.length)} of ${matches.length} emoji` : 'No emoji found. Try another name.'}</p>
     <div className="emoji-results" aria-label="Emoji results">
       {matches.slice(0, limit).map(([emoji, name]) => <button type="button" key={emoji} title={String(name)} aria-label={`Send ${name}`}

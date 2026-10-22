@@ -1,11 +1,15 @@
+import {lockState} from './security'
 import {joinRoom, type Room} from 'trystero'
+import {notifyNow, toast} from './notify'
+import {playNotificationTone} from './sound'
+import {openRoute} from './nav'
 import {identity} from './identity'
 import {createStore} from './store'
 import {hkdfHex, hmacHex, timingSafeEqual} from './crypto'
 import {fromB64, toB64, uid} from './util'
 import {iceServers, settings} from './settings'
 import {nativeBridge} from './native'
-import {withSystemUi} from './platform'
+import {isAppHidden, withSystemUi} from './platform'
 import {idbGet, idbPut, idbDel} from './idb'
 import {claimMedia, releaseMedia} from './media-lease'
 import {applyPartyMove, createPartyGame, validPartyGame, type GameKind, type PartyGame} from './party-games'
@@ -77,6 +81,10 @@ export class PeerGroup {
   local: MediaStream | null = null
   remote = new Map<string, MediaStream>()
   callers = new Set<string>()
+  shared = new Map<string, {stream: MediaStream; title: string}>()
+  presentation: MediaStream | null = null
+  private presentationTitle = ''
+  private lastCallNotice = 0
   joining = false
   error = ''
   connected = false
@@ -101,6 +109,7 @@ export class PeerGroup {
   }
   async reconnect() {
     if (this.disposed || this.connected || this.local || this.joining) return
+    this.stopPresentation(); this.shared.clear(); this.remote.clear()
     ++this.connectionGeneration
     this.connecting = null
     const room = this.room
@@ -152,6 +161,7 @@ export class PeerGroup {
       if (this.peers.size > 3) { this.peers.delete(peerId); return }
       this.connected = true
       this.sendHistory(peerId)
+      if (this.presentation) {try {void Promise.all(room.addStream(this.presentation, {target: peerId, metadata: {padi: 'presentation', title: this.presentationTitle}})).catch(e => this.fail(e))} catch(e) {this.fail(e)}}
       this.send?.({type: 'call', joined: !!this.local}, peerId)
       if (identity.get().deviceId === this.record.owner && this.race) this.send?.({type: 'race', race: this.race}, peerId)
       if (identity.get().deviceId === this.record.owner) this.sendParty(peerId)
@@ -162,13 +172,16 @@ export class PeerGroup {
       const left = this.peers.get(peerId)
       if (left?.device === this.record.owner) this.partySequence = -1
       clearTimeout(this.historyTimers.get(peerId)); this.historyTimers.delete(peerId)
-      this.peers.delete(peerId); this.callers.delete(peerId); this.remote.delete(peerId); this.rates.delete(peerId)
+      this.peers.delete(peerId); this.callers.delete(peerId); this.remote.delete(peerId); this.shared.delete(peerId); this.rates.delete(peerId)
       this.connected = this.peers.size > 0
       if (left && this.race?.players.includes(left.device)) { this.race = null; if (identity.get().deviceId === this.record.owner) this.send?.({type: 'race', race: null}) }
       bump()
     }
-    room.onPeerStream = (stream, peerId) => {
+    room.onPeerStream = (stream, peerId, metadata) => {
       if (this.room !== room) return
+      if (metadata && typeof metadata === 'object' && !Array.isArray(metadata) && metadata.padi === 'presentation' && this.peers.has(peerId)) {
+        this.shared.set(peerId, {stream, title: typeof metadata.title === 'string' ? metadata.title.slice(0, 80) : 'Shared media'}); bump(); return
+      }
       if (this.local && this.callers.has(peerId) && this.peers.has(peerId)) this.remote.set(peerId, stream)
       bump()
     }
@@ -214,10 +227,20 @@ export class PeerGroup {
       if (fresh) messageListeners.forEach(listener => listener(this, message))
     } else if (event.type === 'history' && Array.isArray(event.messages)) {
       this.merge(event.messages.slice(0, 100).filter(validMessage))
+    } else if (event.type === 'presentation-ended') { this.shared.delete(peerId)
     } else if (event.type === 'call' && typeof event.joined === 'boolean') {
       if (event.joined) {
         const newly = !this.callers.has(peerId)
         this.callers.add(peerId)
+        if (newly && !this.local && now - this.lastCallNotice > 15000) {
+          this.lastCallNotice = now
+          const route = {sub: 'groups' as const, focus: this.record.id, tab: 'more' as const}
+          const privateNotice = lockState.get().locked || (isAppHidden() && settings.get().privacyBlur)
+          const body = privateNotice ? 'Open OnePair to join your group call.' : `${peer.name || 'A friend'} is calling in ${this.record.title}`
+          toast({title: 'Incoming group call', body, icon: 'Call', action: () => openRoute(route)}, 10000)
+          if (isAppHidden()) void notifyNow('Incoming group call', body, route)
+          playNotificationTone()
+        }
         if (this.local && newly) {
           try { void Promise.all(this.room?.addStream(this.local, {target: peerId}) ?? []).catch(e => this.fail(e)) } catch(e) { this.fail(e) }
           this.send?.({type: 'call', joined: true}, peerId)
@@ -301,6 +324,19 @@ export class PeerGroup {
     } catch (e) { if (generation === this.generation) { this.leaveCall(); this.fail(e) } }
     finally { if (generation === this.generation) this.joining = false; bump() }
   }
+  async present(stream: MediaStream, title: string) {
+    if (!this.room || this.disposed) {stream.getTracks().forEach(track => track.stop()); throw new Error('Connect to the room first.')}
+    this.stopPresentation()
+    this.presentation = stream; this.presentationTitle = title.slice(0, 80)
+    stream.getTracks().forEach(track => track.addEventListener('ended', () => {if (this.presentation === stream) this.stopPresentation()}, {once: true}))
+    try {await Promise.all(this.room.addStream(stream, {metadata: {padi: 'presentation', title: this.presentationTitle}})); bump()}
+    catch (error) {if (this.presentation === stream) this.stopPresentation(); throw error}
+  }
+  stopPresentation() {
+    const stream = this.presentation; this.presentation = null
+    if (stream) {try {this.room?.removeStream(stream)} catch {} stream.getTracks().forEach(track => track.stop()); this.send?.({type: 'presentation-ended'})}
+    bump()
+  }
   private removeLocalStream(peerId?: string) {
     if (!this.local) return
     try { this.room?.removeStream(this.local, peerId ? {target: peerId} : undefined) } catch(e) { this.fail(e) }
@@ -317,7 +353,7 @@ export class PeerGroup {
     }
     this.local = null; this.remote.clear(); releaseMedia(this); this.send?.({type: 'call', joined: false}); bump()
   }
-  async destroy() { this.disposed = true; ++this.connectionGeneration; this.historyTimers.forEach(clearTimeout); this.historyTimers.clear(); this.leaveCall(); await this.room?.leave(); this.room = null; await this.saving }
+  async destroy() { this.stopPresentation(); this.disposed = true; ++this.connectionGeneration; this.historyTimers.forEach(clearTimeout); this.historyTimers.clear(); this.leaveCall(); await this.room?.leave(); this.room = null; await this.saving }
 }
 function validMessage(v: unknown): v is GroupMessage {
   const m = v as GroupMessage

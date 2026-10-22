@@ -1,6 +1,7 @@
 import {lazy, Suspense, useCallback, useEffect, useState, useSyncExternalStore} from 'react'
 import {Gamepad2, Heart, House, LayoutGrid, MessageCircle} from 'lucide-react'
 import {FxLayer} from './components/Fx'
+import InstallPrompt from './components/InstallPrompt'
 import {Toasts, useMediaUrl} from './components/ui'
 import {dailyImageUrl, GRADIENTS} from './lib/content'
 import {identity} from './lib/identity'
@@ -248,6 +249,7 @@ export default function App() {
       )}
       {locked && s.lockMode !== 'off' && <Lock />}
       {hidden && <div className="privacy-cover" />}
+      <InstallPrompt suppressed={!onboarded || hidden || (locked && s.lockMode !== 'off')} />
       <Toasts />
       <FxLayer />
     </>

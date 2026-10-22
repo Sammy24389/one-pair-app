@@ -37,6 +37,7 @@ export type Settings = {
   // misc
   haptics: boolean
   sounds: boolean
+  notificationTone: 'chime' | 'bell' | 'soft' | 'silent'
   enterToSend: boolean
   reduceMotion: boolean
   activePairId: string
@@ -71,6 +72,7 @@ export const settings = createStore<Settings>(
     ntfyServer: 'https://ntfy.sh',
     haptics: true,
     sounds: true,
+    notificationTone: 'chime',
     enterToSend: false,
     reduceMotion: false,
     activePairId: '',

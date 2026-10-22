@@ -29,6 +29,7 @@ export default function StickerPicker({onSend, onEmoji, onClose}: {
   const [error, setError] = useState('')
   const [managing, setManaging] = useState(false)
   const [cropFile, setCropFile] = useState<File>()
+  const [cropKind, setCropKind] = useState<'image'|'video'>('image')
   const panel = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -76,13 +77,13 @@ export default function StickerPicker({onSend, onEmoji, onClose}: {
         const [file] = await pickFiles(STICKER_ACCEPT)
         if (file) {
           const info = await inspectSticker(file)
-          if (info.kind === 'image') setCropFile(file)
+          if (info.kind !== 'animated') {setCropKind(info.kind);setCropFile(file.type === info.mime ? file : new File([file],file.name,{type:info.mime}))}
           else {setItems(await addSticker(file, file.name)); setManaging(false)}
         }
       })}><Plus size={18} />{busy ? 'Working…' : 'Add sticker'}</button>
       <p className="tiny muted">Photos up to 10 MB · animation up to 2 MB · videos up to 5 MB / 15 seconds</p>
-      <details className="small"><summary style={{minHeight:44,display:'flex',alignItems:'center',cursor:'pointer'}}>Import WhatsApp sticker files</summary><p>Import an individual WebP/GIF image or short MP4/WebM clip. A WhatsApp pack link or clipboard copy is not a media file.</p><p>On Android, if your Files app allows it, look in Internal storage → Android → media → com.whatsapp → WhatsApp → Media → WhatsApp Stickers. Copy the desired .webp file to Downloads, then choose Add sticker here. If unavailable, obtain the original file from its creator or a desktop save option. iPhone requires an exported file saved in Files.</p><p>Animated files keep their animation; still images open the crop editor. Protected packs and proprietary animation formats are not supported.</p></details>
-      {cropFile && <ImageCropper file={cropFile} onCancel={() => setCropFile(undefined)} onOriginal={async () => {setItems(await addSticker(cropFile, cropFile.name));setManaging(false);setCropFile(undefined)}} onSave={async blob => {setItems(await addSticker(blob, cropFile.name));setManaging(false);setCropFile(undefined)}} />}
+      <details className="small"><summary style={{minHeight:44,display:'flex',alignItems:'center',cursor:'pointer'}}>Import WhatsApp sticker files</summary><p>Import an individual WebP/GIF image or short MP4/WebM clip. A WhatsApp pack link or clipboard copy is not a media file.</p><p>On Android, if your Files app allows it, look in Internal storage → Android → media → com.whatsapp → WhatsApp → Media → WhatsApp Stickers. Copy the desired .webp file to Downloads, then choose Add sticker here. If unavailable, obtain the original file from its creator or a desktop save option. iPhone requires an exported file saved in Files.</p><p>Animated files keep their animation; photos and videos open the crop editor. Protected packs and proprietary animation formats are not supported.</p></details>
+      {cropFile && <ImageCropper file={cropFile} kind={cropKind} onCancel={() => setCropFile(undefined)} onOriginal={async () => {setItems(await addSticker(cropFile, cropFile.name));setManaging(false);setCropFile(undefined)}} onSave={async blob => {setItems(await addSticker(blob, cropFile.name));setManaging(false);setCropFile(undefined)}} />}
       {error && <p className="sticker-error small" role="alert">{error}</p>}
       {loading ? <p role="status" className="small muted">Loading stickers…</p> : !items.length ? <p className="small muted">Your saved stickers will appear here. Add an image to get started.</p> : (
         <div className="sticker-grid">

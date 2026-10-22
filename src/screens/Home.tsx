@@ -1,6 +1,7 @@
 import {useEffect, useMemo, useState} from 'react'
 import {BatteryCharging, BatteryMedium, ChevronRight, Clock, MapPin, Phone, Plus, Settings2, Video, X} from 'lucide-react'
 import {burst} from '../components/Fx'
+import {HomeStatusUpdates} from '../components/StatusUpdates'
 import {Avatar, flashEl, MediaImg, Sheet, useFocusTarget} from '../components/ui'
 import {dailyImageUrl, dailyQuestions, MOODS, STATUSES, TOUCHES, touchesFor} from '../lib/content'
 import {daysTogether, inDaysLabel, upcoming} from '../lib/days'
@@ -264,6 +265,8 @@ export default function Home() {
           </div>
         </div>
       </div>
+
+      <HomeStatusUpdates />
 
       {/* Thinking-of-you touches */}
       <div className="card" style={{marginTop: 14}} data-focus="touch">

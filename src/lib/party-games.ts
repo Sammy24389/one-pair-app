@@ -20,13 +20,13 @@ export const GAME_INFO: {
   title: 'Darts',
   minPlayers: 2,
   maxPlayers: 4,
-  rules: 'Take one dart each turn. Reach exactly 101 points. Overshoots score nothing; 60 darts each ends in a draw.'
+  rules: 'Take one dart each turn. Reach exactly 101 points. Overshoots score nothing. Everyone gets a reply in the checkout round; tied checkouts draw. Limit: 60 darts each.'
 }, {
   kind: 'words',
   title: 'Word chain',
   minPlayers: 2,
   maxPlayers: 4,
-  rules: 'Use 3–20 English letters. Begin with the previous word’s final letter; no repeats. Casual play uses no dictionary. First to ten words wins.'
+  rules: 'Use 3–20 English letters. Begin with the previous word’s final letter; no repeats. Casual play uses no dictionary. Ten words each, one point per letter. Finish the full round before comparing scores; tied scores draw.'
 }, {
   kind: 'basketball',
   title: 'Basketball',
@@ -62,11 +62,11 @@ export const GAME_INFO: {
   title: 'Cup pong',
   minPlayers: 2,
   maxPlayers: 4,
-  rules: 'Aim at the next player’s six cups. Clear them to eliminate that player. Last standing wins; twelve shots per player then highest score wins.'
+  rules: 'Each player has the same six-cup rack and twelve throws. Highest number of cups wins after everyone has thrown; tied scores draw.'
 }];
 // Moves: aim games {x,y} in [0,1]; words {word}; connect4 {column}; checkers {from,to} flat row-major;
 // mancala {pit:0..5} relative to own side; paintball {action:'move'|'shoot',x,y} integer grid coordinates.
-// Sports are deterministic target games, with no simulated randomness or claims of physical realism.
+// Host validates landing coordinates; projectile animation is presentation only.
 const integer = (x: unknown, min: number, max: number): x is number => Number.isInteger(x) && x as number >= min && x as number <= max;
 const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x);
 const numbers = (x: unknown, n: number, min: number, max: number): x is number[] => Array.isArray(x) && x.length === n && x.every(v => integer(v, min, max));
@@ -200,7 +200,7 @@ export function validPartyGame(value: unknown): value is PartyGame {
   if (value.kind === 'words') {
     return Array.isArray(data.words) && data.words.length <= 40 &&
       data.words.every(word => typeof word === 'string' && /^[a-z]{3,20}$/.test(word)) &&
-      new Set(data.words).size === data.words.length && numbers(data.scores, playerCount, 0, 10);
+      new Set(data.words).size === data.words.length && numbers(data.scores, playerCount, 0, 200);
   }
   if (value.kind === 'paintball') {
     if (
@@ -215,6 +215,10 @@ export function validPartyGame(value: unknown): value is PartyGame {
       .filter((_, index) => health[index] > 0)
       .map(position => (position as number[]).join(','));
     return new Set(occupiedPositions).size === health.filter(Boolean).length;
+  }
+  if (data.lastShot !== undefined) {
+    const shot=data.lastShot;
+    if (!record(shot) || !['x','y'].every(key => typeof shot[key] === 'number' && Number.isFinite(shot[key]) && (shot[key] as number) >= 0 && (shot[key] as number) <= 1) || (shot.side !== undefined && !integer(shot.side,0,playerCount-1))) return false;
   }
   const maxShots = value.kind === 'basketball' ? 5 : value.kind === 'cup-pong' ? 12 : 60;
   if (!numbers(data.scores, playerCount, 0, value.kind === 'darts' ? 101 : 100) ||
@@ -237,7 +241,7 @@ export function applyPartyMove(state: PartyGame, actor: string, move: Record<str
   if (g.kind === 'paintball' && !(d.health as number[])[side]) {
     return null;
   }
-  if (g.kind === 'cup-pong' && (!(d.cups as number[][])[side].some(Boolean) || (d.shots as number[])[side] >= 12)) {
+  if (g.kind === 'cup-pong' && (d.shots as number[])[side] >= 12) {
     return null;
   }
   const next = () => {
@@ -378,9 +382,9 @@ export function applyPartyMove(state: PartyGame, actor: string, move: Record<str
       return null;
     }
     words.push(word);
-    scores[side]++;
-    if (scores[side] === 10) {
-      win(side);
+    scores[side] += word.length;
+    if (words.length === n * 10) {
+      finishScores(scores);
     } else {
       next();
     }
@@ -435,6 +439,7 @@ export function applyPartyMove(state: PartyGame, actor: string, move: Record<str
     }
     const scores = d.scores as number[],
       shots = d.shots as number[];
+    d.lastShot = {x:move.x,y:move.y,side};
     shots[side]++;
     if (g.kind === 'darts') {
       const dx = move.x - .5,
@@ -445,8 +450,8 @@ export function applyPartyMove(state: PartyGame, actor: string, move: Record<str
       if (scores[side] + points <= 101) {
         scores[side] += points;
       }
-      if (scores[side] === 101) {
-        win(side);
+      if (shots.every(s => s === shots[0]) && scores.includes(101)) {
+        finishScores(scores);
       } else if (shots.every(s => s >= 60)) {
         g.draw = true;
       } else {
@@ -461,27 +466,14 @@ export function applyPartyMove(state: PartyGame, actor: string, move: Record<str
         next();
       }
     } else {
-      const racks = d.cups as number[][],
-        alive = racks.map(c => c.some(Boolean));
-      let target = (side + 1) % n;
-      while (!alive[target] && target !== side) {
-        target = (target + 1) % n;
-      }
-      const hit = cups.findIndex(([x, y], i) => racks[target][i] === 1 && Math.hypot((move.x as number) - x, (move.y as number) - y) <= .105);
+      const racks = d.cups as number[][];
+      const hit = cups.findIndex(([x, y], i) => racks[side][i] === 1 && Math.hypot((move.x as number) - x, (move.y as number) - y) <= .105);
       if (hit >= 0) {
-        racks[target][hit] = 0;
+        racks[side][hit] = 0;
         scores[side]++;
       }
-      const remaining = racks.flatMap((r, i) => r.some(Boolean) ? [i] : []);
-      if (remaining.length === 1) {
-        win(remaining[0]);
-      } else if (remaining.every(i => shots[i] >= 12)) {
-        finishScores(scores.map((s, i) => remaining.includes(i) ? s : -1));
-      } else {
-        do {
-          next();
-        } while (!racks[g.turn].some(Boolean) || shots[g.turn] >= 12);
-      }
+      if (shots.every(count => count >= 12)) finishScores(scores);
+      else next();
     }
   }
   g.version++;

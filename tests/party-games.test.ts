@@ -178,22 +178,17 @@ describe('party games', () => {
     }, 2)!;
     expect(g.winner).toBe('a');
   });
-  it('clears cups deterministically and preserves untouched states', () => {
-    let g = create('cup-pong', players, 'x');
-    for (const [x, y] of CUP_TARGETS) {
-      g = move(g, 'a', {
-        x,
-        y
-      }, g.version)!;
-      if (!g.winner) {
-        g = move(g, 'b', {
-          x: 0,
-          y: 0
-        }, g.version)!;
-      }
+  it('gives all cup pong players twelve turns and independent identical racks', () => {
+    let g=create('cup-pong',players,'x');
+    for(let round=0;round<12;round++) {
+      const [x,y]=CUP_TARGETS[round%6];
+      g=play(g,{x,y});
+      expect(g.winner).toBeNull();
+      g=play(g,{x:0,y:0});
     }
     expect(g.winner).toBe('a');
-    expect(g.data.scores).toEqual([6, 0]);
+    expect(g.data.scores).toEqual([6,0]);
+    expect(g.data.shots).toEqual([12,12]);
   });
 });
 import type { PartyGame } from '../src/lib/party-games';
@@ -244,6 +239,8 @@ describe('completed games and state invariants', () => {
       x: .5 + Math.sin(angle) * .15,
       y: .5 - Math.cos(angle) * .15
     });
+    expect(state.winner).toBeNull();
+    state = play(state, miss);
     expect(state.winner).toBe('a');
     expect(state.data.scores).toEqual([101, 0]);
   });
@@ -345,40 +342,29 @@ describe('completed games and state invariants', () => {
     }
     expect(state.draw).toBe(true);
   });
-  it('eliminates cup pong participants and skips their future turns', () => {
-    let state = create('cup-pong', ['a', 'b', 'c'], 'cups');
-    for (const [x, y] of CUP_TARGETS) {
-      state = play(state, {
-        x,
-        y
-      });
-      if (state.turn === 1) {
-        state = play(state, {
-          x: 0,
-          y: 0
-        });
-      }
-      state = play(state, {
-        x: 0,
-        y: 0
-      });
+  it('draws identical cup pong performance instead of giving starter the win', () => {
+    let state=create('cup-pong',['a','b','c'],'equal');
+    for(let round=0;round<12;round++) for(let side=0;side<3;side++) {
+      const [x,y]=CUP_TARGETS[round%6];state=play(state,{x,y});
     }
-    expect(state.turn).toBe(0);
-    expect((state.data.cups as number[][])[1]).toEqual([0, 0, 0, 0, 0, 0]);
-    for (const [x, y] of CUP_TARGETS) {
-      state = play(state, {
-        x,
-        y
-      });
-      if (!state.winner) {
-        state = play(state, {
-          x: 0,
-          y: 0
-        });
-      }
-    }
-    expect(state.winner).toBe('a');
-    expect(state.data.shots).toEqual([12, 5, 11]);
+    expect(state.draw).toBe(true);
+    expect(state.data.scores).toEqual([6,6,6]);
+    expect(state.data.shots).toEqual([12,12,12]);
+  });
+  it('gives a later darts player a checkout reply and draws tied checkouts', () => {
+    let state=create('darts',players,'reply');
+    state.data.scores=[100,100];state.data.shots=[3,3];
+    const angle=18*Math.PI/180,one={x:.5+Math.sin(angle)*.15,y:.5-Math.cos(angle)*.15};
+    state=play(state,one);expect(state.winner).toBeNull();
+    state=play(state,one);expect(state.draw).toBe(true);
+    expect(state.data.shots).toEqual([4,4]);
+  });
+  it('uses word length and completes ten words each before comparing scores', () => {
+    let state=create('words',players,'word-points');
+    const words=['area','arena','alpha','algebra','alfa','agenda','alga','aloha','aurora','aorta','aroma','acacia','azalea','anaconda','alumina','amoeba','amnesia','ammonia','anaemia','anathema'];
+    for(let i=0;i<words.length;i++) {state=play(state,{word:words[i]});if(i<19)expect(state.winner).toBeNull()}
+    expect(state.winner).toBe('b');
+    expect((state.data.words as string[]).length).toBe(20);
   });
   it('caps cup pong at twelve shots each and resolves tied scores', () => {
     let state = create('cup-pong', ['a', 'b', 'c', 'd'], 'cups-draw');

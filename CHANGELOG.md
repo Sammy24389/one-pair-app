@@ -6,9 +6,18 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-22
+
 ### Added
+- Optional PWA install banner with desktop/Android install prompts, iPhone/iPad instructions, PNG icons and Settings access.
+- Android native screen capture with system consent and a foreground Stop control, connected to private calls and room screen sharing.
+- Local movie/music watch-together streaming, separate Games/Chat/Watch room sections, and private group-call alerts with selectable tones.
+- Swipe-to-throw 2D sports scenes, draggable image/video crop borders and real on-device cropped-video export.
+- Home status previews below the anniversary hero, original-aspect viewing, and a persisted ten-upload daily quota.
+- Direct emoji category buttons and improved game scoring with equal reply rounds.
+
 - Display photos and short profile videos, with on-device storage and pair media sync.
-- Sticker crop preview with zoom/position controls; preserved animated WebP/GIF/APNG and muted video stickers.
+- Sticker crop preview with draggable borders; preserved animated WebP/GIF/APNG and muted video stickers.
 - Manual WhatsApp sticker-file import guidance and generic Android file MIME detection.
 - Searchable Unicode 17.0 emoji catalogue with categories, flags, skin tones and joined sequences.
 - Photo/video statuses with optional captions and a combined feed for all paired users.
@@ -22,6 +31,7 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 - Web regression tests for call lifecycle, call UI, sticker storage, and sticker picker, enforced in CI.
 
 ### Fixed
+- Remove automatic first-player word-chain wins and allow equal darts/cup-pong scoring opportunities.
 - Compact call framing and controls, with draggable private/group call panels and viewport bounds.
 - Stop late media permission results from reviving ended calls or leaving camera/microphone tracks open.
 - Release call visibility subscriptions and late wake locks when their owners are destroyed.

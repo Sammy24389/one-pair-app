@@ -1,0 +1,9 @@
+# Game experience contract
+
+Original touch-first 2D scenes replace the moving-crosshair sports controls. No Apple assets or 3D-engine claims. Swipe upward in darts, basketball and cup pong: direction and length determine a bounded landing coordinate; an animated ballistic arc shows the throw on every connected device. Board games receive dimensional pieces and surfaces. Manual labelled aim controls remain available for keyboard and reduced-motion users.
+
+Acceptance: host still validates actor, version and landing bounds; spectators cannot throw; cancelled/hidden gestures do not submit; duplicate sends are guarded; opponents see the last throw. No new service, account, storage or dependency is introduced. P2P host authority is retained, so a malicious host can cheat; this is casual play.
+
+Fairness audit: word chain formerly awarded every valid word one point and ended immediately when the starter reached ten, so successful alternating play guaranteed the starter victory. It now compares total letters after ten words per player. Darts formerly ended before later players could reply; checkout now completes the round and tied checkouts draw. Cup pong formerly eliminated a player before their last reply; each player now receives an independent identical rack and twelve throws, with score ties drawn. Basketball already gave five shots each. Board games and tactical paintball retain strategic opening advantages; random seating for each new game distributes who receives them, without claiming their rules are mathematically balanced.
+
+Verification: game rule regressions cover reply rounds, equal attempts and ties, plus gesture submission/cancellation and keyboard fallback. Root integration must also visually inspect small mobile and desktop viewports. No database, API endpoints or cloud compute is added. Animation is local and the normalized shot is host-authoritative. Existing disconnected-player pause and host-loss limits apply.

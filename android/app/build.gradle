@@ -1,5 +1,9 @@
 apply plugin: 'com.android.application'
 
+def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
+def versionParts = appVersion.tokenize('.').collect { it as int }
+def appVersionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
+
 android {
     namespace = "app.onepair.p2p"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -7,9 +11,9 @@ android {
         applicationId "app.onepair.p2p"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // CI passes these from the git tag (see .github/workflows/release.yml)
-        versionCode((System.getenv("ONEPAIR_VERSION_CODE") ?: "1") as int)
-        versionName(System.getenv("ONEPAIR_VERSION_NAME") ?: "1.0.0")
+        // Release CI may override these; local/debug builds use the same package version.
+        versionCode((System.getenv("ONEPAIR_VERSION_CODE") ?: appVersionCode.toString()) as int)
+        versionName(System.getenv("ONEPAIR_VERSION_NAME") ?: appVersion)
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

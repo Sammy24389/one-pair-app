@@ -1,6 +1,8 @@
+import {playNotificationTone} from '../lib/sound'
 import {useEffect, useState} from 'react'
 import {Camera, Download, Fingerprint, Lock as LockIcon, Plus, RefreshCw, Trash2, Upload, Wifi} from 'lucide-react'
 import {Donate} from '../components/Donate'
+import {InstallSettingsRow} from '../components/InstallPrompt'
 import {Avatar, EmojiPicker, Seg, Sheet, StartPagePicker, Switch, TopBar} from '../components/ui'
 import {dailyImageUrl, GRADIENTS} from '../lib/content'
 import {exportBackup, importBackup} from '../lib/backup'
@@ -187,6 +189,9 @@ const Appearance = () => {
         </Row>
         <Row title="Haptics">
           <Switch checked={s.haptics} onChange={haptics => settings.set({haptics})} />
+        </Row>
+        <Row title="Notification tone" sub="Messages and incoming calls. Android channel settings can override this.">
+          <label><span className="sr-only">Notification tone</span><select className="input" value={s.notificationTone} onChange={e => {const notificationTone = e.target.value as typeof s.notificationTone; settings.set({notificationTone}); playNotificationTone(notificationTone, true)}}>{['chime', 'bell', 'soft', 'silent'].map(tone => <option key={tone} value={tone}>{tone}</option>)}</select></label>
         </Row>
         <Row title="Sounds">
           <Switch checked={s.sounds} onChange={sounds => settings.set({sounds})} />
@@ -478,6 +483,7 @@ const General = () => {
   return (
     <>
       <TopBar title="Settings" />
+      <InstallSettingsRow />
       {space && (
         <div className="card" style={{marginBottom: 14}}>
           <h3>Your space with {space.peerProfile().name}</h3>

@@ -1,0 +1,11 @@
+# Android screen sharing
+
+Explicit Share screen requests call the native MediaProjection system picker. No permission is requested at startup. Each session obtains fresh consent; an Android foreground service of type mediaProjection starts before getMediaProjection and registers its callback before creating one virtual display. The private persistent notification includes Stop sharing. Revocation, lock, process/task exit, app stop and JavaScript cleanup release capture resources. Service restart is START_NOT_STICKY and never reuses consent tokens.
+
+Bridge: startScreenCapture() resolves {width,height} only when capture starts, rejects denied/cancelled/failed sessions. screenFrame carries {data,width,height} with JPEG base64 (no data URL prefix); output max dimension1280, shorter dimension720, preserving aspect ratio, at most10fps and256KiB encoded JPEG. Rotation and Android14 selected-window resizing resize the existing virtual display and surface. Native copies visible RGBA rows respecting pixel/row stride. The JavaScript consumer must decode one frame at a time, reject malformed/oversized frames and revoke images; native retains no images on disk. The canvas stream is sent through the existing encrypted peer room or private call.
+
+stopScreenCapture() waits for the active service cleanup. screenCaptureStopped carries a user-facing reason for Android revocation/notification stop. A stopped stream cannot silently restart. Protected apps may return black content. This captures video only: other-app audio is not requested or promised. Calls keep their independently consented microphone/camera streams.
+
+Required device verification: Android 14 (API 34)+ full display and selected app; deny picker; stop from Android notification/chip; rotate; lock screen; leave room; start-stop-start; incoming/ongoing call; slow receiving phone. Build/type checks cannot establish physical-device capture behavior. No new backend, cloud storage or persistent files are added. CPU and radio usage increase during live capture; the resolution/frame cap bounds work, and the user must keep the app able to run. Revert bridge/service/manifest changes together to roll back.
+
+Official implementation reference: https://developer.android.com/media/grow/media-projection (consent per session, foreground service type, required callback and resize guidance).

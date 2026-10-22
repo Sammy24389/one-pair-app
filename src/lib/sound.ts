@@ -18,14 +18,15 @@ const tone = (freq: number, start: number, dur: number, gain = 0.12, type: Oscil
   o.stop(c.currentTime + start + dur + 0.05)
 }
 
-export const playPop = () => {
-  if (!settings.get().sounds) return
+export const playPop = () => playNotificationTone()
+
+export const playNotificationTone = (selection = settings.get().notificationTone, preview = false) => {
+  if ((!preview && !settings.get().sounds) || selection === 'silent') return
   try {
-    tone(880, 0, 0.12, 0.06)
-    tone(1320, 0.06, 0.14, 0.05)
-  } catch {
-    /* audio blocked */
-  }
+    void ac().resume().catch(() => {})
+    const notes = selection === 'bell' ? [1046, 1568, 1318] : selection === 'soft' ? [440, 554] : [880, 1320]
+    notes.forEach((frequency, i) => tone(frequency, i * .12, .3, .06, selection === 'bell' ? 'triangle' : 'sine'))
+  } catch { /* Audio may require a user gesture. */ }
 }
 
 export const playHeart = () => {
@@ -49,8 +50,9 @@ export const startRing = (outgoing: boolean) => {
         tone(440, 0, 0.9, 0.05)
         tone(480, 0, 0.9, 0.05)
       } else {
-        ;[0, 0.18, 0.36].forEach((t, i) => tone([659, 784, 988][i], t, 0.25, 0.1, 'triangle'))
-        ;[0.9, 1.08, 1.26].forEach((t, i) => tone([659, 784, 988][i], t, 0.25, 0.1, 'triangle'))
+        if (settings.get().notificationTone === 'silent' || !settings.get().sounds) return
+        playNotificationTone()
+
       }
     } catch {
       /* audio blocked */

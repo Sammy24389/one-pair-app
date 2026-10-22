@@ -1,7 +1,8 @@
 import {activeStatuses, postStatus, pruneStatuses, removeStatus, STATUS_ACTIVE_LIMIT, validateStatusMedia, type StatusRecord, type StatusMedia} from './status'
 import type {Space} from './space'
 import {uid} from './util'
-import {putMedia} from './idb'
+import {idbDel, putMedia} from './idb'
+import {consumeStatusQuota} from './status-quota'
 
 export function statusFeed(spaces: Space[], now = Date.now()) {
   const seen = new Set<string>()
@@ -18,7 +19,7 @@ export function statusFeed(spaces: Space[], now = Date.now()) {
 export function checkStatusCapacity(spaces: Space[], now = Date.now()) {
   if (!spaces.length) throw new Error('Pair with someone before sharing a status.')
   if (spaces.some(s => activeStatuses(s.statuses, [s.me], now).length >= STATUS_ACTIVE_LIMIT)) {
-    throw new Error('You can share up to 5 active statuses. Delete one to add another.')
+    throw new Error('You can keep up to 20 active statuses across two days. Wait for an older update to expire.')
   }
 }
 
@@ -36,7 +37,13 @@ export async function shareStatus(spaces: Space[], text: string, file?: File) {
   postStatus(draft, spaces[0].me, text, Date.now(), media, id)
   if (file && media) await putMedia(media.mediaId, file)
   const now = Date.now()
-  checkStatusCapacity(spaces, now)
+  try {
+    checkStatusCapacity(spaces, now)
+    await consumeStatusQuota(spaces[0].me, now, statusFeed(spaces, now).filter(x => x.own).map(x => x.status))
+  } catch (error) {
+    if (media) await idbDel('media', media.mediaId).catch(() => {})
+    throw error
+  }
   spaces.forEach(s => postStatus(s.statuses, s.me, text, now, media, id))
 }
 

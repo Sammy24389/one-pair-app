@@ -9,7 +9,7 @@ import {postStatus, STATUS_LIFETIME, type StatusRecord} from '../src/lib/status'
 const mocks = vi.hoisted(() => ({space: null as Space | null, others: [] as Space[], ids: ['one'], pick: vi.fn(), store: vi.fn(), url: null as string | null}))
 vi.mock('../src/lib/spaces', () => ({allSpaces: () => [mocks.space!, ...mocks.others], useSpaceIds: () => mocks.ids}))
 vi.mock('../src/lib/media', () => ({pickFiles: mocks.pick}))
-vi.mock('../src/lib/idb', () => ({putMedia: mocks.store}))
+vi.mock('../src/lib/idb', () => ({putMedia: mocks.store, idbUpdate: async (_store: string, _key: string, fn: (current: undefined) => unknown) => fn(undefined)}))
 vi.mock('../src/components/ui', () => ({useMediaUrl: () => mocks.url, TopBar: ({title, sub}: {title: ReactNode; sub: ReactNode}) => <header><h1>{title}</h1><p>{sub}</p></header>}))
 function makeSpace(peer = 'peer', name = 'Sam') {
   const statuses = new Y.Doc().getMap<StatusRecord>('statuses')
@@ -69,14 +69,14 @@ it('only offers deletion for the local update and preserves the paired person up
 })
 
 it('shows the active-limit error and keeps the draft for correction', async () => {
-  for (let i = 0; i < 5; i++) postStatus(mocks.space!.statuses, 'me', `Update ${i}`)
+  for (let i = 0; i < 20; i++) postStatus(mocks.space!.statuses, 'me', `Update ${i}`)
   render(<Status />)
   const input = screen.getByRole('textbox', {name: 'Your update'}) as HTMLTextAreaElement
   fireEvent.change(input, {target: {value: 'One too many'}})
   await act(async () => { fireEvent.click(screen.getByRole('button', {name: 'Share status'})) })
-  expect(screen.getByRole('alert').textContent).toContain('5 active statuses')
+  expect(screen.getByRole('alert').textContent).toContain('20 active statuses')
   expect(input.value).toBe('One too many')
-  expect(mocks.space!.statuses.size).toBe(5)
+  expect(mocks.space!.statuses.size).toBe(20)
 })
 
 it('expires updates on the open screen and cleans up the refresh timer', () => {
@@ -149,4 +149,19 @@ it('plays received videos with controls without autoplay and exposes a playback 
   expect(screen.getByRole('alert')).toBeTruthy()
   fireEvent.click(screen.getByRole('button', {name: 'Retry media'}))
   expect(screen.getByLabelText('Status video')).toBeTruthy()
+})
+
+
+it('opens the original-aspect status viewer and restores focus on Escape', () => {
+  mocks.url = 'blob:received'
+  postStatus(mocks.space!.statuses, 'peer', 'Photo caption', Date.now(), {kind: 'image', mediaId: 'photo', mime: 'image/png', size: 5})
+  render(<Status />)
+  const open = screen.getByRole('button', {name: 'Open status'})
+  open.focus()
+  fireEvent.click(open)
+  expect(screen.getByRole('dialog', {name: "Sam's status"})).toBeTruthy()
+  expect(screen.getByRole('button', {name: 'Close status'})).toBe(document.activeElement)
+  fireEvent.keyDown(document, {key: 'Escape'})
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(document.activeElement).toBe(open)
 })

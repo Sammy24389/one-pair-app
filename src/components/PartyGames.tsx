@@ -4,6 +4,16 @@ import '../styles/party-games.css'
 
 type Player = {id: string; name: string}
 type Move = Record<string, unknown>
+function shuffleSeats(players: string[]) {
+  const seats=[...players]
+  for(let i=seats.length-1;i>0;i--) {
+    const range=i+1,limit=0x100000000-0x100000000%range
+    let random:number
+    do {random=crypto.getRandomValues(new Uint32Array(1))[0]} while(random>=limit)
+    const j=random%range;[seats[i],seats[j]]=[seats[j],seats[i]]
+  }
+  return seats
+}
 type Props = {game: PartyGame | null; players: Player[]; me: string; isHost: boolean; onStart: (kind: GameKind, players: string[]) => void; onMove: (move: Move) => void; error?: string}
 const icons: Record<GameKind, string> = {darts: '🎯', words: '🔤', basketball: '🏀', paintball: '🎨', connect4: '🔴', checkers: '♟', mancala: '🫘', 'cup-pong': '🥤'}
 const cups = CUP_TARGETS
@@ -26,13 +36,13 @@ export default function PartyGames({game, players, me, isHost, onStart, onMove, 
     {error && <p role="alert">{error}</p>}
     {(!game || catalog) && <>
       <div className="party-catalog" aria-label="Choose a game">{GAME_INFO.map(item => <button key={item.kind} className="party-choice" aria-label={`${item.title} ${item.minPlayers === item.maxPlayers ? item.minPlayers : `${item.minPlayers}–${item.maxPlayers}`} players`} aria-pressed={kind === item.kind} onClick={() => {setKind(item.kind); setChosen(null)}}><span aria-hidden="true">{icons[item.kind]}</span><strong>{item.title}</strong><small>{item.minPlayers === item.maxPlayers ? item.minPlayers : `${item.minPlayers}–${item.maxPlayers}`} players</small></button>)}</div>
-      <p className="party-rules">{info.rules}</p>
-      {isHost ? <><fieldset className="party-player-picker"><legend>Players · choose {info.minPlayers === info.maxPlayers ? info.minPlayers : `${info.minPlayers}–${info.maxPlayers}`}</legend>{players.map(player => <label key={player.id}><input type="checkbox" disabled={player.id === me} checked={selection.includes(player.id)} onChange={() => setChosen(selection.includes(player.id) ? selection.filter(id => id !== player.id) : [...selection,player.id])} />{name(player.id)}</label>)}</fieldset><button className="btn primary" disabled={selection.length < info.minPlayers || selection.length > info.maxPlayers} onClick={() => {onStart(kind, selection); setCatalog(false)}}>Start {info.title}</button></> : <p className="muted">The group creator starts games. You can browse the rules while you wait.</p>}
+      <p className="party-rules">{info.rules}</p><p className="small muted">Seats are shuffled for each new game. Board games can still have an opening advantage; swap sides for a rematch.</p>
+      {isHost ? <><fieldset className="party-player-picker"><legend>Players · choose {info.minPlayers === info.maxPlayers ? info.minPlayers : `${info.minPlayers}–${info.maxPlayers}`}</legend>{players.map(player => <label key={player.id}><input type="checkbox" disabled={player.id === me} checked={selection.includes(player.id)} onChange={() => setChosen(selection.includes(player.id) ? selection.filter(id => id !== player.id) : [...selection,player.id])} />{name(player.id)}</label>)}</fieldset><button className="btn primary" disabled={selection.length < info.minPlayers || selection.length > info.maxPlayers} onClick={() => {onStart(kind, shuffleSeats(selection)); setCatalog(false)}}>Start {info.title}</button></> : <p className="muted">The group creator starts games. You can browse the rules while you wait.</p>}
     </>}
     {game && !catalog && <>
       <h4>{icons[game.kind]} {current?.title}</h4><p className="party-rules">{current?.rules}</p>
       <p className="party-turn" role="status" aria-live="polite">{game.winner ? `${name(game.winner)} won!` : game.draw ? 'Draw — well played!' : missing ? 'Game paused: waiting for a player to reconnect.' : game.players.includes(me) ? active ? 'Your turn' : `${name(game.players[game.turn])} to play` : `Watching · ${name(game.players[game.turn])} to play`}</p>
-      {['connect4','checkers','paintball','words'].includes(game.kind) && <div className="party-scores" aria-label="Players">{game.players.map((player,index) => <span key={player}>{index+1}: {name(player)}{game.kind === 'words' ? ` · ${numbers(game.data.scores)[index]} / 10 words` : ''}</span>)}</div>}
+      {['connect4','checkers','paintball','words'].includes(game.kind) && <div className="party-scores" aria-label="Players">{game.players.map((player,index) => <span key={player}>{index+1}: {name(player)}{game.kind === 'words' ? ` · ${numbers(game.data.scores)[index]} points` : ''}</span>)}</div>}
       <GameBoard key={game.id} game={game} active={active} name={name} onMove={onMove} />
     </>}
   </section>
@@ -53,7 +63,7 @@ function GameBoard({game, active, name, onMove}: {game: PartyGame; active: boole
   if (game.kind === 'mancala') return <Mancala game={game} active={active} name={name} onMove={onMove} />
   const health = numbers(data.health)
   const positions = Array.isArray(data.positions) ? data.positions as number[][] : []
-  return <><div className="party-scores">{game.players.map((player,index) => <span key={player}>{name(player)} · {health[index]} lives</span>)}</div><div className="party-actions"><button className="btn" aria-pressed={paintAction === 'move'} disabled={!active} onClick={() => setPaintAction('move')}>Move one square</button><button className="btn" aria-pressed={paintAction === 'shoot'} disabled={!active} onClick={() => setPaintAction('shoot')}>Shoot</button></div><p className="small">Tap a square to {paintAction}. Shots travel in a straight line up to three squares.</p><div className="party-scroll"><div className="party-board party-seven" role="group" aria-label="Paintball arena">{Array.from({length:49},(_,cell) => {const occupants = positions.map((p,index) => health[index] > 0 && p[0]===cell%7 && p[1]===Math.floor(cell/7) ? index : -1).filter(i => i>=0); return <button key={cell} className="party-square" disabled={!active} aria-label={`Row ${Math.floor(cell/7)+1}, column ${cell%7+1}${occupants.map(i => `, ${name(game.players[i])}`).join('')}`} onClick={() => onMove({action:paintAction,x:cell%7,y:Math.floor(cell/7)})}>{occupants.map(i => <span key={i} className={`party-player piece-${i+1}`}>{i+1}</span>)}</button>})}</div></div></>
+  return <><div className="party-scores">{game.players.map((player,index) => <span key={player}>{name(player)} · {health[index]} lives</span>)}</div><div className="party-actions"><button className="btn" aria-pressed={paintAction === 'move'} disabled={!active} onClick={() => setPaintAction('move')}>Move one square</button><button className="btn" aria-pressed={paintAction === 'shoot'} disabled={!active} onClick={() => setPaintAction('shoot')}>Shoot</button></div><p className="small">Tap a square to {paintAction}. Shots travel in a straight line up to three squares.</p><div className="party-scroll"><div className="party-board party-seven party-paintball" role="group" aria-label="Paintball arena">{Array.from({length:49},(_,cell) => {const occupants = positions.map((p,index) => health[index] > 0 && p[0]===cell%7 && p[1]===Math.floor(cell/7) ? index : -1).filter(i => i>=0); return <button key={cell} className="party-square" disabled={!active} aria-label={`Row ${Math.floor(cell/7)+1}, column ${cell%7+1}${occupants.map(i => `, ${name(game.players[i])}`).join('')}`} onClick={() => onMove({action:paintAction,x:cell%7,y:Math.floor(cell/7)})}>{occupants.map(i => <span key={i} className={`party-player piece-${i+1}`}>{i+1}</span>)}</button>})}</div></div></>
 }
 
 function Mancala({game,active,name,onMove}: {game:PartyGame; active:boolean; name:(id:string)=>string; onMove:(move:Move)=>void}) {
@@ -65,55 +75,70 @@ function Mancala({game,active,name,onMove}: {game:PartyGame; active:boolean; nam
 
 function AimGame({game,active,name,onMove}: {game:PartyGame; active:boolean; name:(id:string)=>string; onMove:(move:Move)=>void}) {
   const [point,setPoint] = useState({x:.5,y:.5})
-  const [running,setRunning] = useState(false)
   const [steady,setSteady] = useState(() => !!document.querySelector('[data-reduce-motion]') || (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches))
   const [shotError,setShotError] = useState('')
   const [submitted,setSubmitted] = useState<number | null>(null)
   const [impact,setImpact] = useState<{x:number;y:number}|null>(null)
-  const pointRef = useRef(point)
+  const [flight,setFlight] = useState(1)
+  const [dragging,setDragging] = useState(false)
+  const drag = useRef<{x:number;y:number;id:number;point:{x:number;y:number}}|null>(null)
   const id = useId()
-  useEffect(() => {setRunning(false); if (!active) setSubmitted(null)},[game.version,active])
+  const last = game.data.lastShot as {x:number;y:number;side?:number}|undefined
+  useEffect(() => {setSubmitted(null); setDragging(false); drag.current=null; if (last) {setImpact({x:last.x,y:last.y}); setFlight(0)}},[game.version])
   useEffect(() => {
-    const hidden = () => {if (document.visibilityState === 'hidden') setRunning(false)}
-    document.addEventListener('visibilitychange', hidden)
-    return () => document.removeEventListener('visibilitychange', hidden)
-  }, [])
-  useEffect(() => {
-    if (submitted === null) return
-    const timeout = setTimeout(() => setSubmitted(null), 2500)
-    return () => clearTimeout(timeout)
-  }, [submitted])
-  useEffect(() => {
-    if (!running || !active) return
-    const start = performance.now()
-    let frame = 0
-    const tick = (now:number) => {const t=(now-start)/1000; const p={x:.5+.43*Math.sin(t*3.7),y:.5+.43*Math.sin(t*2.9+.8)};pointRef.current=p;setPoint(p);frame=requestAnimationFrame(tick)}
+    if (!impact || steady) {setFlight(1);return}
+    const start=performance.now(); let frame=0
+    const tick=(now:number) => {const t=Math.min(1,(now-start)/650);setFlight(t);if(t<1) frame=requestAnimationFrame(tick)}
     frame=requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  },[running,active])
-  const fire = () => {
-    const p = steady ? point : pointRef.current
-    setShotError(''); setSubmitted(game.version); setRunning(false); setImpact(p)
-    try {onMove(p)} catch(error) {setSubmitted(null); setShotError(error instanceof Error ? error.message : 'Shot could not be sent. Try again.')}
+  },[impact,steady])
+  useEffect(() => {
+    const hidden = () => {if (document.visibilityState === 'hidden') {drag.current=null;setDragging(false)}}
+    document.addEventListener('visibilitychange',hidden)
+    return () => document.removeEventListener('visibilitychange',hidden)
+  },[])
+  useEffect(() => {
+    if(submitted===null)return
+    const timeout=setTimeout(()=>setSubmitted(null),2500)
+    return()=>clearTimeout(timeout)
+  },[submitted])
+  const fire=(p=point)=>{
+    if(!active || submitted===game.version)return
+    setShotError('');setSubmitted(game.version);setImpact({...p});setFlight(0)
+    try {onMove(p)} catch(error) {setSubmitted(null);setShotError(error instanceof Error ? error.message : 'Shot could not be sent. Try again.')}
   }
-  const verb = game.kind === 'basketball' ? 'Shoot' : 'Throw'
-  const scores = numbers(game.data.scores)
-  const shots = numbers(game.data.shots)
-  const target = game.kind === 'cup-pong' ? (() => {const racks = game.data.cups as number[][]; let next=(game.turn+1)%game.players.length; while(next !== game.turn && !racks[next].some(Boolean)) next=(next+1)%game.players.length;return next})() : 0
-  return <div className="party-aim-game">{shotError && <p role="alert">{shotError}</p>}<div className="party-scores">{game.players.map((player,index) => <span key={player}>{name(player)} <strong>{scores[index] ?? '—'}</strong><small> · {shots[index] || 0} shots</small></span>)}</div>
-    {game.kind === 'cup-pong' && <p className="small">Target: {name(game.players[target])}’s cups</p>}
-    <div className={`party-aim party-aim-${game.kind}`} role="img" aria-label={`${game.kind === 'darts' ? 'Dartboard' : game.kind === 'basketball' ? 'Basketball court' : 'Cup pong table'} with aiming crosshair at ${Math.round(point.x*100)}, ${Math.round(point.y*100)} percent`}>
-      {game.kind === 'darts' && <Dartboard />}
-      {game.kind === 'basketball' && <><div className="party-backboard"/><div className="party-hoop"/><span className="party-ball" aria-hidden="true">🏀</span></>}
-      {game.kind === 'cup-pong' && cups.map(([x,y],index) => (game.data.cups as number[][])[target][index] ? <span className="party-cup" key={index} style={{left:`${x*100}%`,top:`${y*100}%`}}>{index+1}</span> : null)}
-      {impact && <svg className="party-trajectory" viewBox="0 0 100 100" aria-hidden="true"><path d={`M 50 96 Q 50 ${impact.y*100-20} ${impact.x*100} ${impact.y*100}`} /></svg>}
-      {impact && <span className="party-impact" style={{left:`${impact.x*100}%`,top:`${impact.y*100}%`}}>●</span>}
-      <span className="party-reticle" style={{left:`${point.x*100}%`,top:`${point.y*100}%`}}>+</span>
+  const updateDrag=(event:React.PointerEvent<HTMLDivElement>)=>{
+    if(!drag.current || drag.current.id!==event.pointerId)return
+    const box=event.currentTarget.getBoundingClientRect()
+    if(!box.width || !box.height)return
+    const p={x:Math.max(0,Math.min(1,.5+(event.clientX-drag.current.x)/box.width*1.3)),y:Math.max(0,Math.min(1,.92+(event.clientY-drag.current.y)/box.height*1.3))}
+    drag.current.point=p;setPoint(p)
+  }
+  const verb=game.kind==='basketball' ? 'Shoot' : 'Throw'
+  const scores=numbers(game.data.scores),shots=numbers(game.data.shots)
+  const target=flight<1 && last?.side!==undefined ? last.side : game.turn
+  const projectile=impact ? {x:50+(impact.x*100-50)*flight,y:92+(impact.y*100-92)*flight-45*4*flight*(1-flight)} : {x:50,y:92}
+  const surface=game.kind==='darts' ? 'Dartboard' : game.kind==='basketball' ? 'Basketball court' : 'Cup pong table'
+  return <div className="party-aim-game">{shotError && <p role="alert">{shotError}</p>}
+    <div className="party-scores">{game.players.map((player,index)=><span key={player} className={game.turn===index ? 'is-playing' : ''}>{name(player)} <strong>{scores[index] ?? '—'}</strong><small> · {shots[index] || 0} shots</small></span>)}</div>
+    {game.kind==='cup-pong' && <p className="small">{name(game.players[target])}’s rack · everyone gets twelve throws</p>}
+    <div className={`party-aim party-aim-${game.kind} ${dragging ? 'is-dragging' : ''}`} role="img" aria-label={`${surface} with aiming crosshair at ${Math.round(point.x*100)}, ${Math.round(point.y*100)} percent`}
+      onPointerDown={event=>{if(!active || steady || submitted===game.version)return;event.preventDefault();event.currentTarget.setPointerCapture?.(event.pointerId);drag.current={x:event.clientX,y:event.clientY,id:event.pointerId,point:{x:.5,y:.92}};setDragging(true)}}
+      onPointerMove={updateDrag}
+      onPointerUp={event=>{if(!drag.current || drag.current.id!==event.pointerId)return;updateDrag(event);const shot=drag.current.point;const distance=Math.hypot(shot.x-.5,shot.y-.92);drag.current=null;setDragging(false);if(distance>.08)fire(shot)}}
+      onPointerCancel={()=>{drag.current=null;setDragging(false)}}>
+      {game.kind==='darts' && <Dartboard/>}
+      {game.kind==='basketball' && <><div className="party-court-lines"/><div className="party-backboard"/><div className="party-hoop"/></>}
+      {game.kind==='cup-pong' && <><div className="party-table-lines"/>{cups.map(([x,y],index)=>(game.data.cups as number[][])[target][index] ? <span className="party-cup" key={index} style={{left:`${x*100}%`,top:`${y*100}%`}}>{index+1}</span> : null)}</>}
+      {dragging && <svg className="party-trajectory" viewBox="0 0 100 100" aria-hidden="true"><path d={`M 50 92 Q ${25+point.x*50} ${point.y*50-10} ${point.x*100} ${point.y*100}`}/></svg>}
+      {impact && flight===1 && <span className="party-impact" style={{left:`${impact.x*100}%`,top:`${impact.y*100}%`}}>●</span>}
+      <span className={`party-projectile projectile-${game.kind}`} style={{left:`${projectile.x}%`,top:`${projectile.y}%`,transform:`translate(-50%,-50%) scale(${1-flight*.5})`}} aria-hidden="true">{game.kind==='basketball' ? '' : game.kind==='darts' ? '➶' : '●'}</span>
+      {(dragging || steady) && <span className="party-reticle" style={{left:`${point.x*100}%`,top:`${point.y*100}%`}}>+</span>}
+      {!impact && !dragging && !steady && <span className="party-swipe-hint" aria-hidden="true">↑<small>Swipe up to throw</small></span>}
     </div>
-    <label className="party-steady"><input type="checkbox" checked={steady} disabled={running} onChange={event => setSteady(event.target.checked)} />Reduced motion: manual aiming</label>
-    {steady && <div className="party-aim-controls"><label htmlFor={`${id}-x`}>Horizontal aim: {Math.round(point.x*100)}%</label><input id={`${id}-x`} type="range" min="0" max="100" value={Math.round(point.x*100)} disabled={!active} onChange={e => setPoint({...point,x:Number(e.target.value)/100})}/><label htmlFor={`${id}-y`}>Vertical aim: {Math.round(point.y*100)}%</label><input id={`${id}-y`} type="range" min="0" max="100" value={Math.round(point.y*100)} disabled={!active} onChange={e => setPoint({...point,y:Number(e.target.value)/100})}/></div>}
-    <p className="small muted">{steady ? 'Adjust the sliders, then take your shot.' : 'Start aiming, then stop the moving crosshair on your target.'}</p>
-    <button className="btn primary" disabled={!active || submitted === game.version} onClick={() => {if (steady || running) fire(); else setRunning(true)}}>{steady || running ? `${verb} now` : 'Start aiming'}</button>
+    <p className="small muted">Swipe upward on the arena, steer left or right, then release. Longer swipes travel farther.</p>
+    <label className="party-steady"><input type="checkbox" checked={steady} onChange={event=>setSteady(event.target.checked)}/>Reduced motion: manual aiming</label>
+    {steady && <div className="party-aim-controls"><label htmlFor={`${id}-x`}>Horizontal aim: {Math.round(point.x*100)}%</label><input id={`${id}-x`} type="range" min="0" max="100" value={Math.round(point.x*100)} disabled={!active} onChange={e=>setPoint({...point,x:Number(e.target.value)/100})}/><label htmlFor={`${id}-y`}>Vertical aim: {Math.round(point.y*100)}%</label><input id={`${id}-y`} type="range" min="0" max="100" value={Math.round(point.y*100)} disabled={!active} onChange={e=>setPoint({...point,y:Number(e.target.value)/100})}/><button className="btn primary" disabled={!active || submitted===game.version} onClick={()=>fire()}>{verb} now</button></div>}
     {impact && <p className="small" role="status">Last impact: {Math.round(impact.x*100)}% across, {Math.round(impact.y*100)}% down.</p>}
   </div>
 }
