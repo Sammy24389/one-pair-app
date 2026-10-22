@@ -3,7 +3,7 @@ import {PeerGroup, groupInvitation, parseGroupInvitation, raceMove, type Race} f
 import {claimMedia, releaseMedia} from '../src/lib/media-lease'
 vi.mock('trystero', () => ({joinRoom: vi.fn()}))
 vi.mock('../src/lib/crypto', () => ({hkdfHex: vi.fn(async () => 'password')}))
-vi.mock('../src/lib/settings', () => ({iceServers: () => []}))
+vi.mock('../src/lib/settings', () => ({iceServers: () => [], settings: {get: () => ({startTab:'home', lockMode:'off', sounds:false, notificationTone:'silent', keepAlive:false})}}))
 vi.mock('../src/lib/idb', () => ({idbGet: vi.fn(async () => undefined), idbPut: vi.fn(async () => {}), idbDel: vi.fn(async () => {})}))
 const record = {id: 'group123456', owner: 'owner123456', title: 'Friends', secret: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='}
 const groups: PeerGroup[] = []

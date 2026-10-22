@@ -1,3 +1,4 @@
+import {captureScreen, screenCaptureAvailable} from './screen-capture'
 import type {Space} from './space'
 import {claimMedia, releaseMedia} from './media-lease'
 import {identity} from './identity'
@@ -18,6 +19,8 @@ export type CallState = {
   startedAt: number
   muted: boolean
   camOff: boolean
+  sharingScreen: boolean
+  screenBusy: boolean
   facing: 'user' | 'environment'
   local: MediaStream | null
   remote: MediaStream | null
@@ -32,6 +35,8 @@ const IDLE: CallState = {
   startedAt: 0,
   muted: false,
   camOff: false,
+  sharingScreen: false,
+  screenBusy: false,
   facing: 'user',
   local: null,
   remote: null,
@@ -51,6 +56,8 @@ export class CallController {
   private disposed = false
   private offVisibility: () => void
   private enablingVideo = false
+  private savedCamera: MediaStreamTrack | null = null
+  private display: MediaStream | null = null
 
   constructor(space: Space) {
     this.space = space
@@ -73,7 +80,7 @@ export class CallController {
 
   private showCallNotification() {
     const name = this.space.peerProfile().name
-    if (nativeBridge) nativeBridge.showCall({name, video: this.state.video}).catch(() => notifyNow(name, 'Incoming call'))
+    if (nativeBridge) nativeBridge.showCall({name, video: this.state.video, tone: settings.get().sounds ? settings.get().notificationTone : 'silent'}).catch(() => notifyNow(name, 'Incoming call'))
     else notifyNow(name, `${this.state.video ? '🎥 Video' : '📞 Voice'} call – open OnePair to answer`)
   }
 
@@ -191,6 +198,7 @@ export class CallController {
   }
 
   toggleCamera() {
+    if (this.state.sharingScreen) return
     const camOff = !this.state.camOff
     this.state.local?.getVideoTracks().forEach(t => (t.enabled = !camOff))
     this.set({camOff})
@@ -205,7 +213,7 @@ export class CallController {
   async flipCamera() {
     const {local, facing} = this.state
     const old = local?.getVideoTracks()[0]
-    if (this.disposed || !local || !old || this.flipping || this.enablingVideo) return
+    if (this.disposed || !local || !old || this.flipping || this.enablingVideo || this.state.sharingScreen || this.state.screenBusy) return
     const generation = this.generation
     const current = () => !this.disposed && generation === this.generation
     this.flipping = true
@@ -260,10 +268,70 @@ export class CallController {
     }
   }
 
+  /** Screen capture replaces only outgoing video; microphone and peer audio stay connected. */
+  async shareScreen() {
+    if (this.disposed || this.state.phase !== 'active' || this.state.screenBusy || this.state.sharingScreen || this.enablingVideo || this.flipping) return
+    if (!screenCaptureAvailable()) {
+      this.set({error: 'Screen sharing is unavailable in this browser. Use a supported desktop browser over HTTPS or the Android APK.'})
+      return
+    }
+    const local = this.state.local
+    if (!local) return
+    const generation = this.generation
+    const current = () => !this.disposed && generation === this.generation && this.state.phase === 'active'
+    this.set({screenBusy: true, error: ''})
+    let display: MediaStream | null = null
+    try {
+      display = await withSystemUi(() => captureScreen(false))
+      if (!current()) {display.getTracks().forEach(track => track.stop()); return}
+      const track = display.getVideoTracks()[0]
+      if (!track) throw new Error('No screen was selected.')
+      const camera = local.getVideoTracks()[0]
+      if (camera) await Promise.all(this.space.rtc()?.replaceTrack(camera, track) ?? [])
+      else await Promise.all(this.space.rtc()?.addTrack(track, local) ?? [])
+      if (!current()) {display.getTracks().forEach(track => track.stop()); return}
+      this.savedCamera = camera ?? null
+      if (camera) {camera.enabled = false; local.removeTrack(camera)}
+      local.addTrack(track)
+      this.display = display
+      track.onended = () => {void this.stopScreenShare()}
+      this.set({sharingScreen: true, local: new MediaStream(local.getTracks())})
+    } catch (error) {
+      display?.getTracks().forEach(track => track.stop())
+      if (current()) this.set({error: error && typeof error === 'object' && 'name' in error && error.name === 'NotAllowedError' ? 'Screen sharing was cancelled or permission was denied.' : `Could not share screen: ${error instanceof Error ? error.message : 'Please try again.'}`})
+    } finally {if (current()) {this.set({screenBusy: false}); if (this.display?.getVideoTracks()[0]?.readyState === 'ended') void this.stopScreenShare()}}
+  }
+
+  async stopScreenShare() {
+    if (!this.state.sharingScreen || this.state.screenBusy || !this.display || !this.state.local) return
+    const generation = this.generation
+    const local = this.state.local
+    const track = this.display.getVideoTracks()[0]
+    const camera = this.savedCamera
+    this.set({screenBusy: true})
+    try {
+      if (camera && camera.readyState !== 'ended') await Promise.all(this.space.rtc()?.replaceTrack(track, camera) ?? [])
+      else this.space.rtc()?.removeTrack(track)
+      if (this.disposed || generation !== this.generation) return
+      local.removeTrack(track)
+      if (camera && camera.readyState !== 'ended') {camera.enabled = !this.state.camOff; local.addTrack(camera)}
+      track.onended = null
+      this.display.getTracks().forEach(item => item.stop())
+      this.display = null
+      this.savedCamera = null
+      this.set({sharingScreen: false, local: new MediaStream(local.getTracks())})
+    } catch {
+      if (generation === this.generation) {
+        this.set({error: 'The call ended because the camera could not be restored after screen sharing.'})
+        this.hangup()
+      }
+    } finally {if (generation === this.generation && !this.disposed) this.set({screenBusy: false})}
+  }
+
   /** Upgrade an audio call to video mid-call. */
   async enableVideo() {
     const {local} = this.state
-    if (this.disposed || !local || local.getVideoTracks().length || this.enablingVideo || this.flipping) return
+    if (this.disposed || !local || local.getVideoTracks().length || this.enablingVideo || this.flipping || this.state.screenBusy) return
     const generation = this.generation
     this.enablingVideo = true
     try {
@@ -344,6 +412,10 @@ export class CallController {
     stopRing()
     nativeBridge?.cancelCall()
     const s = this.state
+    this.display?.getTracks().forEach(track => {track.onended = null; track.stop()})
+    this.display = null
+    this.savedCamera?.stop()
+    this.savedCamera = null
     if (s.phase === 'active') this.setServiceForCall(false)
     // Missed incoming call while away → leave a normal notification behind.
     if (s.phase === 'incoming' && isAppHidden()) notifyNow(this.space.peerProfile().name, `Missed ${s.video ? 'video' : 'voice'} call`, {pairId: this.space.pair.id, tab: 'chat'})

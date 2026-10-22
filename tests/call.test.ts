@@ -164,3 +164,84 @@ it('reports permission acquisition as busy before the outgoing phase exists', as
   pending.resolve(media())
   await starting
 })
+
+
+it('shares the screen without replacing microphone audio and restores the original camera', async () => {
+  vi.stubGlobal('isSecureContext', true)
+  const {call, rtc} = await active(true)
+  const microphone = call.state.local!.getAudioTracks()[0]
+  const camera = call.state.local!.getVideoTracks()[0]
+  const display = new Stream([new Track('video')]) as unknown as MediaStream
+  Object.assign(navigator.mediaDevices, {getDisplayMedia: vi.fn(async () => display)})
+  await call.shareScreen()
+  expect(call.state.sharingScreen).toBe(true)
+  expect(call.state.local!.getAudioTracks()[0]).toBe(microphone)
+  expect(camera.enabled).toBe(false)
+  expect(rtc.replaceTrack).toHaveBeenCalledWith(camera, display.getVideoTracks()[0])
+  await call.stopScreenShare()
+  expect(call.state.sharingScreen).toBe(false)
+  expect(call.state.local!.getVideoTracks()[0]).toBe(camera)
+  expect(camera.enabled).toBe(true)
+  expect(display.getTracks()[0].stop).toHaveBeenCalled()
+})
+
+it('stops a display capture resolved after hangup and does not revive a call', async () => {
+  vi.stubGlobal('isSecureContext', true)
+  const {call, rtc} = await active()
+  const pending = deferred<MediaStream>()
+  Object.assign(navigator.mediaDevices, {getDisplayMedia: vi.fn(() => pending.promise)})
+  const sharing = call.shareScreen()
+  call.hangup()
+  const display = new Stream([new Track('video')]) as unknown as MediaStream
+  pending.resolve(display)
+  await sharing
+  expect(display.getTracks()[0].stop).toHaveBeenCalledOnce()
+  expect(rtc.addTrack).not.toHaveBeenCalled()
+  expect(call.state.phase).toBe('idle')
+})
+
+it('reports unsupported capture and cancellation without ending the active call', async () => {
+  const {call} = await active()
+  await call.shareScreen()
+  expect(call.state.error).toContain('unavailable in this browser')
+  vi.stubGlobal('isSecureContext', true)
+  Object.assign(navigator.mediaDevices, {getDisplayMedia: vi.fn(async () => {throw new DOMException('cancelled', 'NotAllowedError')})})
+  await call.shareScreen()
+  expect(call.state.error).toContain('cancelled')
+  expect(call.state.phase).toBe('active')
+  expect(call.state.screenBusy).toBe(false)
+})
+
+it('ends screen sharing from the browser stop action and releases retained camera on hangup', async () => {
+  vi.stubGlobal('isSecureContext', true)
+  const {call} = await active(true)
+  const camera = call.state.local!.getVideoTracks()[0]
+  const display = new Stream([new Track('video')]) as unknown as MediaStream
+  Object.assign(navigator.mediaDevices, {getDisplayMedia: vi.fn(async () => display)})
+  await call.shareScreen()
+  const track = display.getVideoTracks()[0]
+  track.onended?.(new Event('ended'))
+  await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+  expect(call.state.sharingScreen).toBe(false)
+  await call.shareScreen()
+  call.hangup()
+  expect(camera.stop).toHaveBeenCalled()
+  expect(track.onended).toBeNull()
+})
+
+
+it('returns screen-shared audio-only calls to microphone-only mode', async () => {
+  vi.stubGlobal('isSecureContext', true)
+  const {call, rtc} = await active()
+  const microphone = call.state.local!.getAudioTracks()[0]
+  const display = new Stream([new Track('video')]) as unknown as MediaStream
+  const removeTrack = vi.fn()
+  Object.assign(rtc, {removeTrack})
+  Object.assign(navigator.mediaDevices, {getDisplayMedia: vi.fn(async () => display)})
+  await call.shareScreen()
+  expect(rtc.addTrack).toHaveBeenCalled()
+  await call.stopScreenShare()
+  expect(removeTrack).toHaveBeenCalledWith(display.getVideoTracks()[0])
+  expect(call.state.local!.getVideoTracks()).toEqual([])
+  expect(call.state.local!.getAudioTracks()[0]).toBe(microphone)
+})

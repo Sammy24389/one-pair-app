@@ -2,7 +2,7 @@ import {uid} from './util'
 
 export const STATUS_LIFETIME = 24 * 60 * 60 * 1000
 export const STATUS_TEXT_LIMIT = 500
-export const STATUS_ACTIVE_LIMIT = 5
+export const STATUS_ACTIVE_LIMIT = 20
 export const STATUS_IMAGE_LIMIT = 10 * 1024 * 1024
 export const STATUS_VIDEO_LIMIT = 25 * 1024 * 1024
 export type StatusMedia = {kind: 'image' | 'video'; mediaId: string; mime: string; size: number}
@@ -61,7 +61,7 @@ export function postStatus(statuses: StatusMap, owner: string, text: string, now
   if (media) validateStatusMedia(media)
   if (!owner || owner.length > 128 || !Number.isSafeInteger(now) || now < 0) throw new Error('Status could not be published.')
   pruneStatuses(statuses, owner, now)
-  if (activeStatuses(statuses, [owner], now).length >= STATUS_ACTIVE_LIMIT) throw new Error('You can share up to 5 active statuses. Delete one to add another.')
+  if (activeStatuses(statuses, [owner], now).length >= STATUS_ACTIVE_LIMIT) throw new Error('You can keep up to 20 active statuses. Wait for an older update to expire.')
   const status: StatusRecord = {id, from: owner, text: trimmed, ts: now, ...media}
   statuses.set(status.id, status)
   return status

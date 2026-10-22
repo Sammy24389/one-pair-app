@@ -1,7 +1,7 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {act,cleanup,fireEvent,render,screen} from '@testing-library/react'
 import ImageCropper from '../src/components/ImageCropper'
-import {squareCrop,cropImage} from '../src/lib/image-crop'
+import {squareCrop,cropImage,resizeCrop,validateCrop} from '../src/lib/image-crop'
 let close:ReturnType<typeof vi.fn>,draw:ReturnType<typeof vi.fn>
 beforeEach(()=>{
   close=vi.fn();draw=vi.fn();vi.stubGlobal('createImageBitmap',vi.fn(async()=>({width:800,height:400,close})))
@@ -22,9 +22,9 @@ it('encodes the selected source region with a512px output limit',async()=>{
 })
 it('previews, saves, cancels and cleans up the crop resources',async()=>{
   const save=vi.fn(async()=>{}),cancel=vi.fn();const view=render(<ImageCropper file={new File(['img'],'photo.png')} onSave={save} onOriginal={vi.fn()} onCancel={cancel}/>)
-  await screen.findByAltText('Sticker crop preview');fireEvent.change(screen.getByLabelText('Zoom'),{target:{value:'2'}});fireEvent.change(screen.getByLabelText('Horizontal crop position'),{target:{value:'100'}})
+  await screen.findByAltText('Sticker crop preview');fireEvent.keyDown(screen.getByRole('button',{name:'Resize left crop border'}),{key:'ArrowRight',shiftKey:true})
   await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Crop and add'}))})
-  expect(save).toHaveBeenCalledWith(expect.objectContaining({type:'image/png'}));expect(draw.mock.calls[0].slice(1,5)).toEqual([600,100,200,200])
+  expect(save).toHaveBeenCalledWith(expect.objectContaining({type:'image/png'}));expect(draw.mock.calls[0].slice(1,5)).toEqual([40,0,760,400])
   fireEvent.keyDown(screen.getByRole('dialog'),{key:'Escape'});expect(cancel).toHaveBeenCalledOnce()
   view.unmount();expect(close).toHaveBeenCalled();expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:crop')
 })
@@ -36,4 +36,31 @@ it('reports storage and decode failures without pretending to save',async()=>{
   vi.mocked(createImageBitmap).mockRejectedValueOnce(new Error('Bad image'))
   render(<ImageCropper file={new File(['bad'],'bad.png')} onSave={vi.fn()} onOriginal={vi.fn()} onCancel={vi.fn()}/>)
   expect((await screen.findByRole('alert')).textContent).toBe('Bad image')
+})
+
+it('clamps dragged crop borders and preserves rectangular aspect ratio',async()=>{
+  expect(resizeCrop({x:0,y:0,width:1,height:1},'left',2)).toEqual({x:0.92,y:0,width:0.07999999999999996,height:1})
+  expect(resizeCrop({x:0.2,y:0.1,width:0.5,height:0.6},'bottom',2).height).toBe(0.9)
+  expect(()=>validateCrop(100,100,{x:0,y:0,width:101,height:100})).toThrow()
+  await cropImage({width:800,height:400} as ImageBitmap,{x:0,y:0,width:800,height:400})
+  expect(draw).toHaveBeenCalledWith(expect.anything(),0,0,800,400,0,0,512,256)
+})
+
+it('releases rejected oversized decoded images immediately',async()=>{
+  vi.mocked(createImageBitmap).mockResolvedValueOnce({width:8192,height:8192,close} as unknown as ImageBitmap)
+  render(<ImageCropper file={new File(['large'],'large.png')} onSave={vi.fn()} onOriginal={vi.fn()} onCancel={vi.fn()}/>)
+  expect((await screen.findByRole('alert')).textContent).toContain('16 megapixels');expect(close).toHaveBeenCalledOnce()
+})
+
+it('keeps the dialog open while a sticker save is pending',async()=>{
+  let finish!:()=>void
+  const cancel=vi.fn(),save=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve}))
+  render(<ImageCropper file={new File(['img'],'photo.png')} onSave={save} onOriginal={vi.fn()} onCancel={cancel}/>)
+  await screen.findByAltText('Sticker crop preview')
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Crop and add'}))})
+  expect((screen.getByRole('button',{name:'Cancel'}) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.keyDown(screen.getByRole('dialog'),{key:'Escape'})
+  expect(cancel).not.toHaveBeenCalled()
+  await act(async()=>{finish()})
+  expect((screen.getByRole('button',{name:'Cancel'}) as HTMLButtonElement).disabled).toBe(false)
 })

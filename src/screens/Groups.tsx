@@ -1,3 +1,5 @@
+import WatchTogether from '../components/WatchTogether'
+import '../styles/groups.css'
 import {useEffect, useRef, useState} from 'react'
 import {GripVertical, Maximize2} from 'lucide-react'
 import {useFloatingCall} from '../components/useFloatingCall'
@@ -8,7 +10,7 @@ import {nav, push, takeFocus} from '../lib/nav'
 import {ensureNotifyPermission} from '../lib/notify'
 import '../styles/call-pip.css'
 import {hostGroupCode, redeemGroupCode, stopGroupCode, type HostedGroupCode} from '../lib/group-codes'
-import {activeGroupCall, acceptGroupInvitation, createGroup, forgetGroup, getGroup, groupEvents, groupInvitation, groupRegistry, type PeerGroup} from '../lib/groups'
+import {activeGroupCall, acceptGroupInvitation, createGroup, forgetGroup, getGroup, groupEvents, groupInvitation, groupRegistry} from '../lib/groups'
 
 function Stream({stream, muted = false}: {stream: MediaStream; muted?: boolean}) {
   const ref = useRef<HTMLVideoElement>(null)
@@ -52,6 +54,8 @@ export default function Groups() {
   const [selected, setSelected] = useState<string | null>(null)
   const focus = nav.use(state => state.focus)
   useEffect(() => {if (focus) setSelected(takeFocus() || null)}, [focus])
+  const [section, setSection] = useState<'play' | 'chat' | 'watch'>('play')
+  const [readMessages, setReadMessages] = useState<Record<string, string | undefined>>({})
   const [title, setTitle] = useState('')
   const [invite, setInvite] = useState('')
   const [text, setText] = useState('')
@@ -65,8 +69,12 @@ export default function Groups() {
   useEffect(() => {if (!sharing) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer)}, [sharing])
   const record = records.find(r => r.id === selected)
   const group = record ? getGroup(record) : null
+  const latestMessage = group?.messages.at(-1)?.id
+  useEffect(() => {
+    if (section === 'chat' && selected) setReadMessages(previous => previous[selected] === latestMessage ? previous : {...previous, [selected]: latestMessage})
+  }, [section, selected, latestMessage])
   const run = (fn: () => void | Promise<unknown>) => {setError(''); try {void Promise.resolve(fn()).catch(e => setError(e instanceof Error ? e.message : 'Try again.'))} catch(e) {setError(e instanceof Error ? e.message : 'Try again.')}}
-  return <div className="screen"><TopBar title="Multiplayer & calls" />
+  return <div className="screen rooms-screen"><TopBar title="Rooms" />
     {error && <p role="alert">{error}</p>}
     {!group ? <>
       {!identity.get().pairs.length && <button className="btn ghost" onClick={() => push('pair')}>Pair a device for private chat</button>}
@@ -98,13 +106,13 @@ export default function Groups() {
       {records.map(r => <button className="list-row card" key={r.id} onClick={() => setSelected(r.id)}>{r.title}</button>)}
       <details className="card"><summary>Connection & notifications</summary><div className="col" style={{gap: 8, marginTop: 8}}><button className="btn ghost" onClick={() => push('connection')}>Connection settings</button><button className="btn ghost" onClick={() => void ensureNotifyPermission()}>Enable message notifications</button></div></details>
     </> : <>
-      <button className="btn" onClick={() => {setSelected(null); setSharing(false)}}>All groups</button>
-      <h2 style={{overflowWrap: 'anywhere'}}>{group.record.title}</h2><p className="small muted">{group.peers.size + 1}/4 devices · {group.connected ? 'Connected' : 'Waiting for friends'}</p>
+      <button className="btn ghost" onClick={() => {setSelected(null); setSharing(false)}}>All groups</button>
+      <h2 className="room-title" style={{overflowWrap: 'anywhere'}}>{group.record.title}</h2><p className="small muted">{group.peers.size + 1}/4 devices · {group.connected ? 'Connected' : 'Waiting for friends'}</p>
       {group.error && <p role="alert">{group.error}</p>}
-      <div className="row" style={{flexWrap: 'wrap'}}><button className="btn" onClick={() => run(async () => {
+      <div className="room-actions row" style={{flexWrap: 'wrap'}}><button className="btn" onClick={() => run(async () => {
         setSharing(true); setRoomCode(null)
         setRoomCode(await hostGroupCode(group.record.id, groupInvitation(group.record)))
-      })}>Share room code</button><button className="btn" disabled={!!group.local || group.joining} onClick={() => run(() => group.joinCall(false))}>Join voice call</button><button className="btn" disabled={!!group.local || group.joining} onClick={() => run(() => group.joinCall(true))}>Join video call</button></div>
+      })}>Share code</button><button className="btn" disabled={!!group.local || group.joining} onClick={() => run(() => group.joinCall(false))}>Voice call</button><button className="btn" disabled={!!group.local || group.joining} onClick={() => run(() => group.joinCall(true))}>Video call</button></div>
       {sharing && <div className="card col" style={{gap: 12}}>
         <h3>Invite friends</h3><p className="small">Ask friends to open Multiplayer and enter this code. Stay online until they join.</p>
         {roomCode ? <>
@@ -115,22 +123,23 @@ export default function Groups() {
         <details><summary>Full invitation for older app versions</summary><label htmlFor="share-group">Private invitation</label><textarea id="share-group" className="input" readOnly value={groupInvitation(group.record)} /></details>
       </div>}
 
+      {!!group.callers.size && !group.local && <div className="room-call-invite" role="status"><div><strong>Call in progress</strong><p>{group.callers.size} {group.callers.size === 1 ? 'friend is' : 'friends are'} waiting. Join with voice or video above.</p></div></div>}
+      <nav className="room-tabs" aria-label="Room sections">{(['play','chat','watch'] as const).map(tab => <button key={tab} className="btn" aria-current={section === tab ? 'page' : undefined} onClick={() => setSection(tab)}>{tab === 'play' ? 'Games' : tab === 'chat' ? `Chat${section !== 'chat' && !!latestMessage && latestMessage !== readMessages[group.record.id] ? ' · New' : ''}` : 'Watch & listen'}</button>)}</nav>
+      <div hidden={section !== 'watch'}><WatchTogether key={group.record.id} group={group} /></div>
+      <div hidden={section !== 'play'}>
       <PartyGames game={group.party}
         players={[{id: identity.get().deviceId, name: identity.get().profile.name || 'You'}, ...[...group.peers.values()].map(peer => ({id: peer.device, name: peer.name || 'Friend'}))]}
         me={identity.get().deviceId} isHost={group.record.owner === identity.get().deviceId}
         onStart={(kind, players) => run(() => group.startParty(kind, players))}
         onMove={move => run(() => group.partyMove(move))} error={error} />
-      <details style={{marginTop: 12}}><summary>More games: Race to 21</summary><RaceGame group={group} onError={setError} /></details>
-      <div className="card" role="log" aria-label="Group messages" style={{maxHeight: '40dvh', overflowY: 'auto'}}>{group.messages.length === 0 && <p className="muted">Send the first message.</p>}{group.messages.map(m => <div key={m.id} style={{padding: '8px 0', overflowWrap: 'anywhere'}}><strong className="small">{m.name || 'Friend'}</strong><p style={{whiteSpace: 'pre-wrap', margin: '4px 0'}}>{m.text}</p></div>)}</div>
-      <form className="row" onSubmit={e => {e.preventDefault(); run(() => {group.message(text); setText('')})}}><label className="grow">Message<input className="input" value={text} maxLength={2000} onChange={e => setText(e.target.value)} required /></label><button className="btn primary" type="submit">Send</button></form>
+      </div>
+      <section hidden={section !== 'chat'} className="room-conversation">
+      <div className="room-messages" role="log" aria-label="Group messages">{group.messages.length === 0 && <p className="muted">Send the first message.</p>}{group.messages.map(m => <div key={m.id} className={`room-bubble ${m.from === identity.get().deviceId ? 'mine' : ''}`}><strong className="small">{m.name || 'Friend'}</strong><p style={{whiteSpace: 'pre-wrap', margin: '4px 0'}}>{m.text}</p></div>)}</div>
+      <form className="row room-composer" onSubmit={e => {e.preventDefault(); run(() => {group.message(text); setText('')})}}><label className="grow">Message<input className="input" value={text} maxLength={2000} onChange={e => setText(e.target.value)} required /></label><button className="btn primary" type="submit">Send</button></form>
       <p className="small muted">Only the latest 300 text messages are stored on this device. History is shared by group members; use groups with trusted friends.</p>
-      <button className="btn" onClick={() => {if (confirm('Leave this group and remove its local messages? Your friends keep their copies.')) run(async () => {stopGroupCode(group.record.id); await forgetGroup(group.record.id); setSelected(null)})}}>Leave and forget group</button>
+      </section>
+      <details className="room-settings"><summary>Room settings</summary>
+      <button className="btn" onClick={() => {if (confirm('Leave this group and remove its local messages? Your friends keep their copies.')) run(async () => {stopGroupCode(group.record.id); await forgetGroup(group.record.id); setSelected(null)})}}>Leave and forget group</button></details>
     </>}
   </div>
-}
-function RaceGame({group, onError}: {group: PeerGroup; onError: (message: string) => void}) {
-  const race = group.race
-  const me = identity.get().deviceId
-  const name = (id: string) => id === me ? 'You' : [...group.peers.values()].find(p => p.device === id)?.name || 'Friend'
-  return <div className="card" style={{marginTop: 12}}><h3>Race to 21</h3><p className="small muted">Take turns adding 1, 2 or 3. Reach exactly 21 to win. Two to four players; the creator must stay connected.</p>{group.record.owner === me && <button className="btn" onClick={() => {try {group.startRace()} catch(e) {onError((e as Error).message)}}}>{race ? 'Restart game' : 'Start game'}</button>}{race && <><p>Total: <strong>{race.total}</strong> · {race.winner ? name(race.winner) + ' won!' : name(race.players[race.turn]) + ' to play'}</p><div className="row">{[1,2,3].map(n => <button className="btn" key={n} disabled={!!race.winner || race.players[race.turn] !== me || race.total + n > 21} onClick={() => group.move(n)}>+{n}</button>)}</div></>}</div>
 }

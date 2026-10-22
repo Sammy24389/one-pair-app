@@ -14,7 +14,8 @@ it('offers all eight games and starts a selected game with chosen participants',
   expect(screen.getByLabelText('Choose a game').children.length).toBe(8)
   fireEvent.click(screen.getByRole('button',{name:/Four in a row 2 players/}))
   fireEvent.click(screen.getByRole('button',{name:'Start Four in a row'}))
-  expect(onStart).toHaveBeenCalledWith('connect4',['a','b'])
+  expect(onStart.mock.calls[0][0]).toBe('connect4')
+  expect([...onStart.mock.calls[0][1]].sort()).toEqual(['a','b'])
 })
 it('keeps the creator selected and disables start without an opponent', () => {
   setup(null)
@@ -79,24 +80,33 @@ it('renders all sports surfaces and hides cleared cup targets', () => {
   expect(screen.getByRole('img',{name:/Dartboard/})).toBeTruthy()
   cleanup()
   const game=createPartyGame('cup-pong',['a','b'],'cups')
-  ;(game.data.cups as number[][])[1][0]=0
+  ;(game.data.cups as number[][])[0][0]=0
   setup('cup-pong',{game})
   expect(screen.getByRole('img',{name:/Cup pong table/}).querySelectorAll('.party-cup').length).toBe(5)
 })
 
-it('cancels aiming when the app is hidden without submitting a shot', () => {
-  const cancel=vi.fn()
-  vi.stubGlobal('requestAnimationFrame', vi.fn(() => 77))
-  vi.stubGlobal('cancelAnimationFrame', cancel)
+it('cancels a touch throw when the app is hidden without submitting', () => {
+  vi.stubGlobal('PointerEvent',MouseEvent)
   const {onMove}=setup('darts')
-  fireEvent.click(screen.getByRole('button',{name:'Start aiming'}))
-  expect(screen.getByRole('button',{name:'Throw now'})).toBeTruthy()
+  const arena=screen.getByRole('img',{name:/Dartboard/})
+  vi.spyOn(arena,'getBoundingClientRect').mockReturnValue({x:0,y:0,width:300,height:300,left:0,top:0,right:300,bottom:300,toJSON:()=>({})})
+  fireEvent.pointerDown(arena,{clientX:100,clientY:250,pointerId:1})
   Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'})
-  act(() => document.dispatchEvent(new Event('visibilitychange')))
-  expect(cancel).toHaveBeenCalledWith(77)
+  act(()=>document.dispatchEvent(new Event('visibilitychange')))
+  fireEvent.pointerUp(arena,{clientX:100,clientY:50,pointerId:1})
   expect(onMove).not.toHaveBeenCalled()
-  expect(screen.getByRole('button',{name:'Start aiming'})).toBeTruthy()
   Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'})
+})
+it('turns an upward touch gesture into a bounded sports move', () => {
+  vi.stubGlobal('PointerEvent',MouseEvent)
+  const {onMove}=setup('basketball')
+  const arena=screen.getByRole('img',{name:/Basketball court/})
+  vi.spyOn(arena,'getBoundingClientRect').mockReturnValue({x:0,y:0,width:300,height:300,left:0,top:0,right:300,bottom:300,toJSON:()=>({})})
+  fireEvent.pointerDown(arena,{clientX:150,clientY:280,pointerId:1})
+  fireEvent.pointerUp(arena,{clientX:150,clientY:125,pointerId:1})
+  expect(onMove).toHaveBeenCalledTimes(1)
+  expect(onMove.mock.calls[0][0].x).toBe(.5)
+  expect(onMove.mock.calls[0][0].y).toBeCloseTo(.2483,3)
 })
 it('honors app reduced-motion preference and recovers from a thrown send error', () => {
   document.documentElement.setAttribute('data-reduce-motion','')
@@ -106,4 +116,11 @@ it('honors app reduced-motion preference and recovers from a thrown send error',
   fireEvent.click(screen.getByRole('button',{name:'Shoot now'}))
   expect(screen.getByRole('alert').textContent).toContain('Connection lost')
   expect((screen.getByRole('button',{name:'Shoot now'}) as HTMLButtonElement).disabled).toBe(false)
+})
+
+it('does not show an impact until the host accepts the submitted shot',()=>{
+  setup('basketball')
+  fireEvent.click(screen.getByRole('checkbox',{name:'Reduced motion: manual aiming'}))
+  fireEvent.click(screen.getByRole('button',{name:'Shoot now'}))
+  expect(screen.queryByText(/Last impact:/)).toBeNull()
 })

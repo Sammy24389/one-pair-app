@@ -4,6 +4,7 @@ import {allSpaces, useSpaceIds} from '../lib/spaces'
 import {STATUS_TEXT_LIMIT, STATUS_LIFETIME, validateStatusMedia, type StatusRecord} from '../lib/status'
 import {deleteSharedStatus, pruneOwnStatuses, shareStatus, statusFeed} from '../lib/status-feed'
 import {pickFiles} from '../lib/media'
+import {StatusViewer} from '../components/StatusUpdates'
 
 function StatusMedia({status}: {status: StatusRecord}) {
   const url = useMediaUrl(status.mediaId)
@@ -39,6 +40,7 @@ export default function Status() {
   const pending = useRef(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [selected, setSelected] = useState<ReturnType<typeof statusFeed>[number]>()
   useEffect(() => {
     const spaces = allSpaces()
     const off = spaces.map(s => s.subscribe(() => refreshVersion(v => v + 1)))
@@ -65,7 +67,7 @@ export default function Status() {
   return <div className="screen full">
     <TopBar title="Status" sub="Updates from all your paired users" />
     <div className="card col" style={{gap: 12}}>
-      <p className="small muted" style={{margin: 0}}>Share text, photos or videos with all {spaces.length} current paired users for 24 hours. Updates transfer when both devices are online.</p>
+      <p className="small muted" style={{margin: 0}}>Share text, photos or videos with all {spaces.length} current paired users for 24 hours. Updates transfer when both devices are online. Maximum 10 uploads per day; deleting an update does not reset this limit.</p>
       <form className="col" style={{gap: 8}} onSubmit={async event => {
         event.preventDefault()
         if (pending.current) return
@@ -101,9 +103,11 @@ export default function Status() {
           {own && <button className="btn ghost" style={{minHeight: 44}} onClick={() => { deleteSharedStatus(allSpaces(), status.id); setMessage('Status deleted. Deletion syncs when paired users reconnect.'); refreshVersion(v => v + 1) }}>Delete</button>}
         </div>
         <StatusMedia status={status} />
+        <button className="btn ghost status-open-media" onClick={() => setSelected({status, own, name})}>Open status</button>
         {status.text && <p style={{whiteSpace: 'pre-wrap', overflowWrap: 'anywhere'}}>{status.text}</p>}
         <p className="tiny muted" style={{marginBottom: 0}}>Expires in {Math.max(1, Math.ceil((status.ts + STATUS_LIFETIME - now) / 60000))} min</p>
       </article>)}
     </div>
+    {selected && updates.some(x => x.status.id === selected.status.id && x.status.from === selected.status.from) && <StatusViewer update={selected} onClose={() => setSelected(undefined)} />}
   </div>
 }

@@ -50,19 +50,23 @@ let nid = 1
 /** Show a notification now. Tapping it opens `route` (e.g. the chat, scrolled to the message). */
 export const notifyNow = async (title: string, body: string, route?: Route) => {
   const routeJson = route ? JSON.stringify(route) : undefined
+  const prefs = settings.get()
+  const tone = !prefs.sounds || prefs.notificationTone === 'silent' ? 'silent' : prefs.notificationTone === 'bell' || prefs.notificationTone === 'soft' ? prefs.notificationTone : 'chime'
   try {
     if (isNative) {
       try {
         // Native path posts immediately (LocalNotifications goes through AlarmManager and can lag ~1 min).
-        await nativeBridge!.show({id: nid++ % 900, title, body, route: routeJson})
+        await nativeBridge!.show({id: nid++ % 900, title, body, route: routeJson, tone})
         return
       } catch {
         /* fall back to the plugin below */
       }
       const {LocalNotifications} = await import('@capacitor/local-notifications')
-      await LocalNotifications.schedule({notifications: [{id: nid++ % 900, title, body, channelId: 'messages', smallIcon: 'ic_stat_heart', iconColor: '#E8577E', group: 'onepair-messages', extra: {route: routeJson}}]})
+      const channelId = `fallback_messages_v1_${tone}`
+      await LocalNotifications.createChannel({id: channelId, name: `Messages - ${tone}`, importance: tone === 'silent' ? 2 : 4, visibility: 0, vibration: tone !== 'silent', sound: tone === 'silent' ? undefined : `notification_${tone}.wav`})
+      await LocalNotifications.schedule({notifications: [{id: nid++ % 900, title, body, channelId, smallIcon: 'ic_stat_heart', iconColor: '#E8577E', group: 'onepair-messages', extra: {route: routeJson}}]})
     } else if ('Notification' in window && Notification.permission === 'granted') {
-      const n = new Notification(title, {body, icon: 'icon.svg', tag: route?.focus ?? 'onepair'})
+      const n = new Notification(title, {body, silent: !prefs.sounds || tone === 'silent', icon: 'icon.svg', tag: route?.focus ?? 'onepair'})
       n.onclick = () => {
         window.focus()
         if (route) openRoute(route)

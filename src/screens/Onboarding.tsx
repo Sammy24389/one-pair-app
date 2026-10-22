@@ -5,9 +5,9 @@ import {identity, type Mode} from '../lib/identity'
 import {avatarFromFile, pickFiles} from '../lib/media'
 
 const FEATURES = [
-  {icon: Radio, title: 'Truly peer-to-peer', body: 'Messages, calls and photos go straight between your two phones. No accounts, no cloud, no server.'},
-  {icon: Lock, title: 'Private by design', body: 'End-to-end encrypted connections, PIN and biometric lock, and only two devices ever hold your data.'},
-  {icon: Sparkles, title: 'Made for two', body: 'Daily questions, memories, countdowns, games, a shared doodle pad and little "thinking of you" taps.'}
+  {icon: Radio, title: 'Truly peer-to-peer', body: 'Chats and calls travel between connected devices. No accounts; your history is stored locally.'},
+  {icon: Lock, title: 'Private by design', body: 'Encrypted peer connections, optional app locking, and no central chat-history database.'},
+  {icon: Sparkles, title: 'Pairs and small groups', body: 'Daily questions and shared memories for pairs, plus games and calls in rooms for up to four.'}
 ]
 
 export default function Onboarding() {
@@ -23,7 +23,7 @@ export default function Onboarding() {
         <div className="logo">💞</div>
         <div className="center">
           <h1>OnePair</h1>
-          <p className="muted">A private little world for you and your person.</p>
+          <p className="muted">A private little world for you and your people.</p>
         </div>
         <div className="card col" style={{gap: 16}}>
           {FEATURES.map(f => (
@@ -94,7 +94,8 @@ export default function Onboarding() {
         </button>
         <h2>What should your pair call you?</h2>
       </div>
-      <input className="input" placeholder="Your name" value={name} maxLength={32} onChange={e => setName(e.target.value)} autoFocus />
+      <label className="label" htmlFor="onboard-name">Your name</label>
+      <input id="onboard-name" className="input" placeholder="Your name" value={name} maxLength={32} onChange={e => setName(e.target.value)} autoFocus />
       <div className="card tight">
         <EmojiPicker value={emoji} onChange={e => (setEmoji(e), setAvatar(undefined))} />
       </div>

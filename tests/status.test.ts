@@ -21,11 +21,11 @@ describe('private pair statuses', () => {
     expect(() => postStatus(statuses, 'me', 'Hi', NaN)).toThrow()
     expect(() => postStatus(statuses, 'me', 'x'.repeat(500), now)).not.toThrow()
   })
-  it('enforces five active statuses per owner and frees slots after deletion or expiry', () => {
+  it('enforces twenty active statuses per owner and frees slots after deletion or expiry', () => {
     const statuses = create()
     const first = postStatus(statuses, 'me', 'first', now)
-    for (let i = 0; i < 4; i++) postStatus(statuses, 'me', `Update ${i}`, now)
-    expect(() => postStatus(statuses, 'me', 'sixth', now)).toThrow('5 active')
+    for (let i = 0; i < 19; i++) postStatus(statuses, 'me', `Update ${i}`, now)
+    expect(() => postStatus(statuses, 'me', 'sixth', now)).toThrow('20 active')
     expect(() => postStatus(statuses, 'peer', 'independent', now)).not.toThrow()
     removeStatus(statuses, 'me', first.id)
     expect(() => postStatus(statuses, 'me', 'replacement', now)).not.toThrow()
