@@ -237,7 +237,7 @@ export class PeerGroup {
           const route = {sub: 'groups' as const, focus: this.record.id, tab: 'more' as const}
           const privateNotice = lockState.get().locked || (isAppHidden() && settings.get().privacyBlur)
           const body = privateNotice ? 'Open OnePair to join your group call.' : `${peer.name || 'A friend'} is calling in ${this.record.title}`
-          toast({title: 'Incoming group call', body, icon: 'Call', action: () => openRoute(route)}, 10000)
+          toast({title: 'Incoming group call', body, icon: '📞', action: () => openRoute(route)}, 10000)
           if (isAppHidden()) void notifyNow('Incoming group call', body, route)
           playNotificationTone()
         }

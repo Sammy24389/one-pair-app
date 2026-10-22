@@ -111,7 +111,8 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 - **Instant Android notifications** for messages, touches and incoming calls while the app is in the background, using separate "Messages & calls" and "Gentle nudges" channels.
 - **CI and release automation**: GitHub Actions build the APK and PWA, publish a Release with these notes, and deploy to GitHub Pages.
 
-[Unreleased]: https://github.com/OWNER/REPO/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/Sammy24389/one-pair-app/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/Sammy24389/one-pair-app/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/OWNER/REPO/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/OWNER/REPO/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/OWNER/REPO/releases/tag/v1.0.0

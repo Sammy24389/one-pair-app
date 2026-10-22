@@ -26,7 +26,7 @@ export default function ImageCropper({file,kind='image',onSave,onOriginal,onCanc
     }).catch(cause=>{clearTimeout(timer);if(live)setError(cause instanceof Error?cause.message:'Could not open image.')})
     return()=>{live=false;clearTimeout(timer);controller.current?.abort();loaded?.close();bitmap.current=null;URL.revokeObjectURL(url);if(previous?.isConnected)previous.focus()}
   },[file,kind])
-  const cancel=()=>{controller.current?.abort();onCancel()}
+  const cancel=()=>{if(pending.current)return;controller.current?.abort();onCancel()}
   const save=async(original=false)=>{
     if(pending.current||!media)return
     pending.current=true;setBusy(true);setProgress(0);setError('');controller.current=new AbortController()
@@ -43,7 +43,7 @@ export default function ImageCropper({file,kind='image',onSave,onOriginal,onCanc
     if(event.key==='Escape'){event.stopPropagation();cancel()}
     if(event.key==='Tab'){const controls=root.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled)');if(!controls?.length)return;const first=controls[0],last=controls[controls.length-1];if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}}
   }}>
-    <div className="row between"><h3 id={`${id}-title`}>{kind==='video'?'Crop video sticker':'Crop sticker'}</h3><button className="btn ghost" onClick={cancel}>Cancel</button></div>
+    <div className="row between"><h3 id={`${id}-title`}>{kind==='video'?'Crop video sticker':'Crop sticker'}</h3><button className="btn ghost" disabled={busy} onClick={cancel}>Cancel</button></div>
     <p className="small muted">Drag the four borders to keep the part you want. Focus a handle and use arrow keys for precise adjustments.</p>
     <div className="crop-stage" ref={stage} style={{aspectRatio:media?`${media.w}/${media.h}`:'1',width:media?`min(calc(100% - 44px), ${Math.min(360,window.innerHeight*0.48*media.w/media.h)}px)`:'calc(100% - 44px)'}}>
       {kind==='video'?<video ref={video} src={videoUrl||undefined} muted playsInline preload="auto" aria-label="Video sticker crop preview" onLoadedData={async event=>{

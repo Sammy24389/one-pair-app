@@ -1,5 +1,5 @@
 import {afterEach,beforeEach,expect,it,vi} from 'vitest'
-const bridge=vi.hoisted(()=>({startScreenCapture:vi.fn(),stopScreenCapture:vi.fn(),addListener:vi.fn()}))
+const bridge=vi.hoisted(()=>({startScreenCapture:vi.fn(),stopScreenCapture:vi.fn(),acknowledgeScreenFrame:vi.fn(),addListener:vi.fn()}))
 vi.mock('../src/lib/native',()=>({nativeBridge:bridge}))
 import {captureScreen,screenCaptureAvailable} from '../src/lib/screen-capture'
 class Track extends EventTarget { nativeStop=vi.fn(); stop=this.nativeStop }
@@ -10,7 +10,7 @@ const images:FakeImage[]=[]
 class FakeImage {onload:(()=>void)|null=null;onerror:(()=>void)|null=null;src='';naturalWidth=640;naturalHeight=360;constructor(){images.push(this)}}
 beforeEach(()=>{
   track=new Track();draw=vi.fn();remove=vi.fn(async()=>{});listeners.clear();images.length=0
-  bridge.startScreenCapture.mockResolvedValue({width:640,height:360});bridge.stopScreenCapture.mockResolvedValue(undefined)
+  bridge.startScreenCapture.mockResolvedValue({width:640,height:360});bridge.stopScreenCapture.mockResolvedValue(undefined);bridge.acknowledgeScreenFrame.mockResolvedValue(undefined)
   bridge.addListener.mockImplementation(async(name:string,handler:(value:unknown)=>void)=>{listeners.set(name,handler);return {remove}})
   vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:draw} as never)
   Object.defineProperty(HTMLCanvasElement.prototype,'captureStream',{configurable:true,value:vi.fn(()=>({getVideoTracks:()=>[track],getTracks:()=>[track]}))})
@@ -78,4 +78,29 @@ it('drops an undecodable frame and permits a later valid frame',async()=>{
   frame({data:'broken',width:640,height:360});images[0].onerror!()
   frame({data:'valid',width:640,height:360});expect(images).toHaveLength(2)
   images[1].onload!();expect(draw).toHaveBeenCalledOnce();expect(bridge.stopScreenCapture).not.toHaveBeenCalled()
+})
+
+it('acknowledges frames only after decoding, and acknowledges rejected payloads immediately',async()=>{
+  stream=await captureScreen();const frame=listeners.get('screenFrame')!
+  frame({frameId:1,data:'jpg',width:640,height:360})
+  expect(bridge.acknowledgeScreenFrame).not.toHaveBeenCalled()
+  images[0].onload!()
+  expect(bridge.acknowledgeScreenFrame).toHaveBeenCalledExactlyOnceWith({frameId:1})
+  frame({frameId:2,data:'x'.repeat(360001),width:640,height:360})
+  expect(bridge.acknowledgeScreenFrame).toHaveBeenLastCalledWith({frameId:2})
+  frame({frameId:3,data:'broken',width:640,height:360});images[1].onerror!()
+  expect(bridge.acknowledgeScreenFrame).toHaveBeenLastCalledWith({frameId:3})
+})
+it('releases the pending frame once when stopped during decoding and ignores late image callbacks',async()=>{
+  stream=await captureScreen();listeners.get('screenFrame')!({frameId:42,data:'jpg',width:640,height:360})
+  stream.getTracks()[0].stop()
+  expect(bridge.acknowledgeScreenFrame).toHaveBeenCalledExactlyOnceWith({frameId:42})
+  expect(images[0].onload).toBeNull();expect(images[0].onerror).toBeNull()
+  expect(draw).not.toHaveBeenCalled()
+})
+it('acknowledges a dropped concurrent frame without releasing the decoding frame',async()=>{
+  stream=await captureScreen();const frame=listeners.get('screenFrame')!
+  frame({frameId:1,data:'jpg',width:640,height:360});frame({frameId:2,data:'next',width:640,height:360})
+  expect(bridge.acknowledgeScreenFrame).toHaveBeenCalledExactlyOnceWith({frameId:2})
+  images[0].onload!();expect(bridge.acknowledgeScreenFrame).toHaveBeenLastCalledWith({frameId:1})
 })

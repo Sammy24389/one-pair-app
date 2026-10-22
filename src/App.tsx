@@ -249,7 +249,7 @@ export default function App() {
       )}
       {locked && s.lockMode !== 'off' && <Lock />}
       {hidden && <div className="privacy-cover" />}
-      <InstallPrompt suppressed={!onboarded || hidden || (locked && s.lockMode !== 'off')} />
+      <InstallPrompt suppressed={!onboarded || (!hasPairs && !hasGroups) || hidden || (locked && s.lockMode !== 'off')} />
       <Toasts />
       <FxLayer />
     </>

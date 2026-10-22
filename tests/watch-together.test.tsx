@@ -108,3 +108,14 @@ it('releases a late screen picker capture if the sharing screen has unmounted',a
   await act(async()=>{resolve(capture as unknown as MediaStream);await pending})
   expect(room.present).not.toHaveBeenCalled();expect(capture.tracks[0].stop).toHaveBeenCalledOnce()
 })
+
+it('remounts the media element after a room stops sharing externally',async()=>{
+  const room=group(),view=render(<WatchTogether group={room as unknown as PeerGroup}/>);selectSource()
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Share this playback'}))})
+  const first=view.container.querySelector('video')
+  act(()=>{room.stopPresentation();view.rerender(<WatchTogether group={room as unknown as PeerGroup}/>)})
+  expect(view.container.querySelector('video')).not.toBe(first)
+  expect(contexts[0].close).toHaveBeenCalledOnce()
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Share this playback'}))})
+  expect(room.present).toHaveBeenCalledTimes(2)
+})

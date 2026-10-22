@@ -25,11 +25,13 @@ export function StatusAsset({status, compact = false}: {status: StatusRecord; co
 
 export function StatusViewer({update, onClose}: {update: Update; onClose: () => void}) {
   const panel = useRef<HTMLDivElement>(null)
+  const close = useRef(onClose)
+  close.current = onClose
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null
     panel.current?.querySelector<HTMLButtonElement>('button')?.focus()
     const key = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {event.preventDefault(); event.stopPropagation(); onClose()}
+      if (event.key === 'Escape') {event.preventDefault(); event.stopPropagation(); close.current()}
       if (event.key === 'Tab' && panel.current) {
         const items = [...panel.current.querySelectorAll<HTMLElement>('button, video[controls], [tabindex="0"]')]
         const first = items[0], last = items.at(-1)
@@ -41,7 +43,7 @@ export function StatusViewer({update, onClose}: {update: Update; onClose: () => 
     const overflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => {document.removeEventListener('keydown', key, true); document.body.style.overflow = overflow; previous?.focus()}
-  }, [onClose])
+  }, [])
   return createPortal(<div className="status-viewer" onClick={event => {if (event.target === event.currentTarget) onClose()}}>
     <div ref={panel} role="dialog" aria-modal="true" aria-label={`${update.name}'s status`} className="status-viewer-panel">
       <header><strong>{update.name}</strong><button className="icon-btn" aria-label="Close status" onClick={onClose}><X size={24} /></button></header>

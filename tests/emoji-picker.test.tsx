@@ -57,3 +57,13 @@ it('uses direct category tabs with keyboard navigation and clears search on sele
   expect((screen.getByLabelText('Search emoji') as HTMLInputElement).value).toBe('')
   expect(screen.queryByRole('combobox')).toBeNull()
 })
+
+it('keeps one category in the tab order and selects All for cross-category search',()=>{
+  render(<EmojiPicker onEmoji={vi.fn()}/>)
+  expect(screen.getAllByRole('tab').filter(tab=>tab.tabIndex===0)).toHaveLength(1)
+  fireEvent.change(screen.getByLabelText('Search emoji'),{target:{value:'heart'}})
+  const all=screen.getByRole('tab',{name:'All emoji'})
+  expect(all.getAttribute('aria-selected')).toBe('true')
+  expect(all.tabIndex).toBe(0)
+  expect(screen.getAllByRole('tab').filter(tab=>tab.tabIndex===0)).toEqual([all])
+})

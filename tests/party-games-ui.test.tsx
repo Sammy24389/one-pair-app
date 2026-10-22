@@ -89,6 +89,7 @@ it('cancels a touch throw when the app is hidden without submitting', () => {
   vi.stubGlobal('PointerEvent',MouseEvent)
   const {onMove}=setup('darts')
   const arena=screen.getByRole('img',{name:/Dartboard/})
+  vi.spyOn(arena,'getBoundingClientRect').mockReturnValue({x:0,y:0,width:300,height:300,left:0,top:0,right:300,bottom:300,toJSON:()=>({})})
   fireEvent.pointerDown(arena,{clientX:100,clientY:250,pointerId:1})
   Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'})
   act(()=>document.dispatchEvent(new Event('visibilitychange')))
@@ -115,4 +116,11 @@ it('honors app reduced-motion preference and recovers from a thrown send error',
   fireEvent.click(screen.getByRole('button',{name:'Shoot now'}))
   expect(screen.getByRole('alert').textContent).toContain('Connection lost')
   expect((screen.getByRole('button',{name:'Shoot now'}) as HTMLButtonElement).disabled).toBe(false)
+})
+
+it('does not show an impact until the host accepts the submitted shot',()=>{
+  setup('basketball')
+  fireEvent.click(screen.getByRole('checkbox',{name:'Reduced motion: manual aiming'}))
+  fireEvent.click(screen.getByRole('button',{name:'Shoot now'}))
+  expect(screen.queryByText(/Last impact:/)).toBeNull()
 })

@@ -20,9 +20,11 @@ export async function captureScreen(audio = false): Promise<MediaStream> {
   let closed = false, rendering = false, stoppedReason = '', stream: MediaStream | null = null
   let originalStop: (() => void) | null = null
   let image: HTMLImageElement | null = null
+  let acknowledgePending: (() => void) | null = null
   const close = (stopNative: boolean, notifyTrack = false) => {
     if (closed) return
     closed = true
+    acknowledgePending?.(); acknowledgePending = null
     listeners.splice(0).forEach(listener => {void listener.remove().catch(() => {})})
     if (image) {image.onload = null; image.onerror = null; image.src = ''; image = null}
     originalStop?.()
@@ -36,7 +38,14 @@ export async function captureScreen(audio = false): Promise<MediaStream> {
       stoppedReason = event.reason || 'Screen sharing stopped.'; close(false, true)
     }))
     listeners.push(await nativeBridge.addListener('screenFrame', frame => {
-      if (closed || rendering || typeof frame.data !== 'string' || frame.data.length > 360000 || !validSize(frame.width,frame.height)) return
+      let acknowledged = false
+      const acknowledge = () => {
+        if (acknowledged) return
+        acknowledged = true
+        if (Number.isSafeInteger(frame.frameId) && frame.frameId > 0) void nativeBridge!.acknowledgeScreenFrame({frameId:frame.frameId}).catch(() => {})
+      }
+      if (closed || rendering || typeof frame.data !== 'string' || frame.data.length > 360000 || !validSize(frame.width,frame.height)) {acknowledge(); return}
+      acknowledgePending = acknowledge
       rendering = true
       const next = new Image(); image = next
       next.onload = () => {
@@ -46,9 +55,9 @@ export async function captureScreen(audio = false): Promise<MediaStream> {
             paint.drawImage(next,0,0,canvas.width,canvas.height)
             ;(stream?.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack | undefined)?.requestFrame?.()
           }
-        } catch {close(true,true)} finally {rendering=false;image=null;next.onload=null;next.onerror=null}
+        } catch {close(true,true)} finally {rendering=false;image=null;next.onload=null;next.onerror=null;acknowledge();acknowledgePending=null}
       }
-      next.onerror = () => {rendering=false;image=null;next.onload=null;next.onerror=null}
+      next.onerror = () => {rendering=false;image=null;next.onload=null;next.onerror=null;acknowledge();acknowledgePending=null}
       next.src = `data:image/jpeg;base64,${frame.data}`
     }))
     const size = await nativeBridge.startScreenCapture()

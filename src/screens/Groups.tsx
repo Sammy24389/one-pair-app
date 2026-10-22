@@ -55,7 +55,7 @@ export default function Groups() {
   const focus = nav.use(state => state.focus)
   useEffect(() => {if (focus) setSelected(takeFocus() || null)}, [focus])
   const [section, setSection] = useState<'play' | 'chat' | 'watch'>('play')
-  const [readMessages, setReadMessages] = useState(0)
+  const [readMessages, setReadMessages] = useState<Record<string, string | undefined>>({})
   const [title, setTitle] = useState('')
   const [invite, setInvite] = useState('')
   const [text, setText] = useState('')
@@ -69,6 +69,10 @@ export default function Groups() {
   useEffect(() => {if (!sharing) return; const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer)}, [sharing])
   const record = records.find(r => r.id === selected)
   const group = record ? getGroup(record) : null
+  const latestMessage = group?.messages.at(-1)?.id
+  useEffect(() => {
+    if (section === 'chat' && selected) setReadMessages(previous => previous[selected] === latestMessage ? previous : {...previous, [selected]: latestMessage})
+  }, [section, selected, latestMessage])
   const run = (fn: () => void | Promise<unknown>) => {setError(''); try {void Promise.resolve(fn()).catch(e => setError(e instanceof Error ? e.message : 'Try again.'))} catch(e) {setError(e instanceof Error ? e.message : 'Try again.')}}
   return <div className="screen rooms-screen"><TopBar title="Rooms" />
     {error && <p role="alert">{error}</p>}
@@ -120,7 +124,7 @@ export default function Groups() {
       </div>}
 
       {!!group.callers.size && !group.local && <div className="room-call-invite" role="status"><div><strong>Call in progress</strong><p>{group.callers.size} {group.callers.size === 1 ? 'friend is' : 'friends are'} waiting. Join with voice or video above.</p></div></div>}
-      <nav className="room-tabs" aria-label="Room sections">{(['play','chat','watch'] as const).map(tab => <button key={tab} className="btn" aria-current={section === tab ? 'page' : undefined} onClick={() => {setSection(tab); if (tab === 'chat') setReadMessages(group.messages.length)}}>{tab === 'play' ? 'Games' : tab === 'chat' ? `Chat${section !== 'chat' && group.messages.length > readMessages ? ' · New' : ''}` : 'Watch & listen'}</button>)}</nav>
+      <nav className="room-tabs" aria-label="Room sections">{(['play','chat','watch'] as const).map(tab => <button key={tab} className="btn" aria-current={section === tab ? 'page' : undefined} onClick={() => setSection(tab)}>{tab === 'play' ? 'Games' : tab === 'chat' ? `Chat${section !== 'chat' && !!latestMessage && latestMessage !== readMessages[group.record.id] ? ' · New' : ''}` : 'Watch & listen'}</button>)}</nav>
       <div hidden={section !== 'watch'}><WatchTogether key={group.record.id} group={group} /></div>
       <div hidden={section !== 'play'}>
       <PartyGames game={group.party}

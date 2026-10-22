@@ -191,7 +191,7 @@ const Appearance = () => {
           <Switch checked={s.haptics} onChange={haptics => settings.set({haptics})} />
         </Row>
         <Row title="Notification tone" sub="Messages and incoming calls. Android channel settings can override this.">
-          <label><span className="sr-only">Notification tone</span><select className="input" value={s.notificationTone} onChange={e => {const notificationTone = e.target.value as typeof s.notificationTone; settings.set({notificationTone}); playNotificationTone(notificationTone, true)}}>{['chime', 'bell', 'soft', 'silent'].map(tone => <option key={tone} value={tone}>{tone}</option>)}</select></label>
+          <select aria-label="Notification tone" className="input" value={s.notificationTone} onChange={e => {const notificationTone = e.target.value as typeof s.notificationTone; settings.set({notificationTone}); playNotificationTone(notificationTone, true)}}>{['chime', 'bell', 'soft', 'silent'].map(tone => <option key={tone} value={tone}>{tone}</option>)}</select>
         </Row>
         <Row title="Sounds">
           <Switch checked={s.sounds} onChange={sounds => settings.set({sounds})} />

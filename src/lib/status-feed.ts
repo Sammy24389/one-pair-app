@@ -19,7 +19,7 @@ export function statusFeed(spaces: Space[], now = Date.now()) {
 export function checkStatusCapacity(spaces: Space[], now = Date.now()) {
   if (!spaces.length) throw new Error('Pair with someone before sharing a status.')
   if (spaces.some(s => activeStatuses(s.statuses, [s.me], now).length >= STATUS_ACTIVE_LIMIT)) {
-    throw new Error('You can keep up to 20 active statuses across two days. Wait for an older update to expire.')
+    throw new Error('You can keep up to 20 active statuses. Wait for an older update to expire.')
   }
 }
 

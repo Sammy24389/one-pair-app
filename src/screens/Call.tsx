@@ -107,7 +107,7 @@ export default function CallOverlay({space, minimized, onMinimize, onRestore, lo
           <div className="info">
             {!remoteHasVideo && <div className={cx(s.phase !== 'active' && 'pulse')}><Avatar p={peer} size={120} /></div>}
             <h1>{peer.name}</h1><div>{label}{s.sharingScreen ? " · Sharing screen" : ""}</div>
-            {s.error && <p role="alert" style={{maxWidth: 420, fontSize: 14}}>{s.error}</p>}
+            {s.error && <p role="alert" style={{maxWidth: 420, fontSize: 14}}>{s.error} <button className="btn" onClick={() => space.call.clearError()}>Dismiss</button></p>}
           </div>
           <div className="controls">
             {s.phase === 'incoming' ? (

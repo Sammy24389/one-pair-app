@@ -14,7 +14,7 @@ export function nextStatusQuota(current: StatusQuota | undefined, now: number, e
   const previous = current?.day === day && Number.isSafeInteger(current.count) ? current.count : 0
   const published = new Set(existing.filter(s => statusDay(s.ts) === day).map(s => s.id)).size
   const count = Math.max(previous, published)
-  if (count >= STATUS_DAILY_LIMIT) throw new Error('You have shared 10 statuses today. You can share again tomorrow. Deleting a status does not reset the daily limit.')
+  if (count >= STATUS_DAILY_LIMIT) throw new Error(`You have shared ${STATUS_DAILY_LIMIT} statuses today. You can share again tomorrow. Deleting a status does not reset the daily limit.`)
   return {day, count: count + 1}
 }
 

@@ -16,13 +16,18 @@ export default function WatchTogether({group}: {group: PeerGroup}) {
   const player = useRef<HTMLVideoElement>(null)
   const cleanup = useRef<() => void>(() => {})
   const generation = useRef(0)
+  const activePresentation = useRef<MediaStream | null>(null)
   const [source, setSource] = useState<{url: string; name: string} | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [revision, setRevision] = useState(0)
-  const stop = (refresh = true) => {generation.current++; group.stopPresentation(); cleanup.current(); cleanup.current = () => {}; if(refresh) setRevision(n => n+1); setBusy(false)}
+  const stop = (refresh = true) => {activePresentation.current = null; generation.current++; group.stopPresentation(); cleanup.current(); cleanup.current = () => {}; if(refresh) setRevision(n => n+1); setBusy(false)}
   useEffect(() => () => {generation.current++; group.stopPresentation(); cleanup.current()}, [group])
   useEffect(() => () => {if (source) URL.revokeObjectURL(source.url)}, [source])
+  useEffect(() => {
+    if (activePresentation.current && !group.presentation) stop()
+    activePresentation.current = group.presentation
+  }, [group.presentation])
   const screen = async () => {
     setError('')
     if (!screenCaptureAvailable()) {setError('Use a supported desktop browser or the Android APK to start sharing. This browser can still receive shared screens.'); return}

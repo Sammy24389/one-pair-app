@@ -13,7 +13,7 @@ import android.media.AudioAttributes;
 import android.media.projection.MediaProjectionManager;
 import android.os.Handler;
 import android.os.Looper;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Build;
@@ -60,7 +60,8 @@ public class OnePairNativePlugin extends Plugin {
     private volatile PluginCall screenCall;
     private volatile PluginCall screenStopCall;
     private final Handler screenMain = new Handler(Looper.getMainLooper());
-    private final AtomicBoolean frameQueued = new AtomicBoolean();
+    private final AtomicInteger pendingFrame = new AtomicInteger();
+    private final AtomicInteger frameSequence = new AtomicInteger();
 
     @Override
     public void load() {
@@ -92,6 +93,7 @@ public class OnePairNativePlugin extends Plugin {
         }
         getContext().stopService(new Intent(getContext(), ScreenCaptureService.class));
         ScreenCaptureService.listener = null;
+        pendingFrame.set(0);
         if (screenCall != null) {screenCall.reject("Screen sharing closed."); screenCall = null;}
         if (screenStopCall != null) {screenStopCall.reject("Screen sharing closed."); screenStopCall = null;}
         if (instance == this) instance = null;
@@ -378,14 +380,20 @@ public class OnePairNativePlugin extends Plugin {
                 screenCall = null; JSObject data = new JSObject(); data.put("width", width); data.put("height", height); call.resolve(data);
             });}
             @Override public void frame(String jpeg, int width, int height) {
-                if (!frameQueued.compareAndSet(false, true)) return;
-                screenMain.post(() -> {try {
-                    if (instance != OnePairNativePlugin.this || !ScreenCaptureService.running) return;
-                    JSObject data = new JSObject(); data.put("data", jpeg); data.put("width", width); data.put("height", height);
+                int frameId = frameSequence.updateAndGet(previous -> previous == Integer.MAX_VALUE ? 1 : previous + 1);
+                if (!pendingFrame.compareAndSet(0, frameId)) return;
+                screenMain.post(() -> {
+                    if (pendingFrame.get() != frameId) return;
+                    if (instance != OnePairNativePlugin.this || !ScreenCaptureService.running) {
+                        pendingFrame.compareAndSet(frameId, 0); return;
+                    }
+                    JSObject data = new JSObject(); data.put("frameId", frameId); data.put("data", jpeg); data.put("width", width); data.put("height", height);
                     notifyListeners("screenFrame", data);
-                } finally {frameQueued.set(false);}});
+                    // Keep the slot occupied until JavaScript decodes or drops this frame.
+                });
             }
             @Override public void stopped(String reason) {screenMain.post(() -> {
+                pendingFrame.set(0);
                 if (screenCall == call) {screenCall = null; call.reject(reason);}
                 JSObject data = new JSObject(); data.put("reason", reason); notifyListeners("screenCaptureStopped", data);
                 if (screenStopCall != null) {screenStopCall.resolve(); screenStopCall = null;}
@@ -397,7 +405,14 @@ public class OnePairNativePlugin extends Plugin {
         } catch (Exception e) {screenCall = null; ScreenCaptureService.listener = null; call.reject("Could not start screen sharing: " + e.getMessage());}
     }
     @PluginMethod
+    public void acknowledgeScreenFrame(PluginCall call) {
+        Integer frameId = call.getInt("frameId");
+        if (frameId != null && frameId > 0) pendingFrame.compareAndSet(frameId, 0);
+        call.resolve();
+    }
+    @PluginMethod
     public void stopScreenCapture(PluginCall call) {
+        pendingFrame.set(0);
         if (screenStopCall != null) {call.reject("Screen sharing is already stopping."); return;}
         if (screenCall != null) {screenCall.reject("Screen sharing cancelled."); screenCall = null;}
         screenStopCall = call;

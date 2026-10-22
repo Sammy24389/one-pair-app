@@ -92,3 +92,11 @@ it.each(['native', 'standalone'])('does not intercept installation or launch the
   openInstallHelp()
   expect(pwaInstall.get().expanded).toBe(false)
 })
+
+it('preserves the focused manual install button when guidance opens',()=>{
+  render(<InstallPrompt />)
+  const button=screen.getByRole('button',{name:'How to install'})
+  button.focus();fireEvent.click(button)
+  expect(document.activeElement).toBe(button)
+  expect(button.isConnected).toBe(true)
+})

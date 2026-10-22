@@ -51,3 +51,16 @@ it('releases rejected oversized decoded images immediately',async()=>{
   render(<ImageCropper file={new File(['large'],'large.png')} onSave={vi.fn()} onOriginal={vi.fn()} onCancel={vi.fn()}/>)
   expect((await screen.findByRole('alert')).textContent).toContain('16 megapixels');expect(close).toHaveBeenCalledOnce()
 })
+
+it('keeps the dialog open while a sticker save is pending',async()=>{
+  let finish!:()=>void
+  const cancel=vi.fn(),save=vi.fn(()=>new Promise<void>(resolve=>{finish=resolve}))
+  render(<ImageCropper file={new File(['img'],'photo.png')} onSave={save} onOriginal={vi.fn()} onCancel={cancel}/>)
+  await screen.findByAltText('Sticker crop preview')
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Crop and add'}))})
+  expect((screen.getByRole('button',{name:'Cancel'}) as HTMLButtonElement).disabled).toBe(true)
+  fireEvent.keyDown(screen.getByRole('dialog'),{key:'Escape'})
+  expect(cancel).not.toHaveBeenCalled()
+  await act(async()=>{finish()})
+  expect((screen.getByRole('button',{name:'Cancel'}) as HTMLButtonElement).disabled).toBe(false)
+})

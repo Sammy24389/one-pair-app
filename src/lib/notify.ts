@@ -62,7 +62,7 @@ export const notifyNow = async (title: string, body: string, route?: Route) => {
         /* fall back to the plugin below */
       }
       const {LocalNotifications} = await import('@capacitor/local-notifications')
-      const channelId = `messages_v2_${tone}`
+      const channelId = `fallback_messages_v1_${tone}`
       await LocalNotifications.createChannel({id: channelId, name: `Messages - ${tone}`, importance: tone === 'silent' ? 2 : 4, visibility: 0, vibration: tone !== 'silent', sound: tone === 'silent' ? undefined : `notification_${tone}.wav`})
       await LocalNotifications.schedule({notifications: [{id: nid++ % 900, title, body, channelId, smallIcon: 'ic_stat_heart', iconColor: '#E8577E', group: 'onepair-messages', extra: {route: routeJson}}]})
     } else if ('Notification' in window && Notification.permission === 'granted') {

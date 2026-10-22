@@ -24,7 +24,7 @@ export default function EmojiPicker({onEmoji, disabled = false}: {onEmoji: (emoj
     <div className="emoji-categories" role="tablist" aria-label="Emoji categories">
       {['All emoji', ...data.groups].map((group, index) => {
         const value = index ? String(index - 1) : 'all'
-        return <button type="button" role="tab" key={value} aria-label={group} title={group} aria-selected={!search.trim() && category === value}
+        return <button type="button" role="tab" key={value} aria-label={group} title={group} aria-selected={(search.trim() ? 'all' : category) === value} tabIndex={(search.trim() ? 'all' : category) === value ? 0 : -1}
           onClick={() => {setCategory(value); setSearch(''); setLimit(PAGE_SIZE)}}
           onKeyDown={event => {
             if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return

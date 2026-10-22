@@ -12,7 +12,8 @@ type OnePairNative = {
   stopKeepAlive(): Promise<void>
   startScreenCapture(): Promise<{width: number; height: number}>
   stopScreenCapture(): Promise<void>
-  addListener(event: 'screenFrame', fn: (e: {data: string; width: number; height: number}) => void): Promise<PluginListenerHandle>
+  acknowledgeScreenFrame(o: {frameId: number}): Promise<void>
+  addListener(event: 'screenFrame', fn: (e: {frameId: number; data: string; width: number; height: number}) => void): Promise<PluginListenerHandle>
   addListener(event: 'screenCaptureStopped', fn: (e: {reason: string}) => void): Promise<PluginListenerHandle>
   batteryStatus(): Promise<{unrestricted: boolean; serviceRunning: boolean}>
   requestBatteryExemption(): Promise<void>

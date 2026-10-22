@@ -20,8 +20,8 @@ it('honors silent/sounds off and bounds unknown preferences',async()=>{
 it('configures fallback channels with bundled sounds and quiet importance for silent',async()=>{
   mocks.show.mockRejectedValue(new Error('native unavailable'));mocks.prefs.notificationTone='soft'
   await notifyNow('Hello','Message')
-  expect(mocks.createChannel).toHaveBeenLastCalledWith(expect.objectContaining({id:'messages_v2_soft',sound:'notification_soft.wav',importance:4}))
+  expect(mocks.createChannel).toHaveBeenLastCalledWith(expect.objectContaining({id:'fallback_messages_v1_soft',sound:'notification_soft.wav',importance:4}))
   mocks.prefs.notificationTone='silent';await notifyNow('Hello','Message')
-  expect(mocks.createChannel).toHaveBeenLastCalledWith(expect.objectContaining({id:'messages_v2_silent',sound:undefined,importance:2,vibration:false}))
-  expect(mocks.schedule).toHaveBeenLastCalledWith({notifications:[expect.objectContaining({channelId:'messages_v2_silent'})]})
+  expect(mocks.createChannel).toHaveBeenLastCalledWith(expect.objectContaining({id:'fallback_messages_v1_silent',sound:undefined,importance:2,vibration:false}))
+  expect(mocks.schedule).toHaveBeenLastCalledWith({notifications:[expect.objectContaining({channelId:'fallback_messages_v1_silent'})]})
 })

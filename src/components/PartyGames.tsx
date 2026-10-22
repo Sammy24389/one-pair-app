@@ -104,7 +104,7 @@ function AimGame({game,active,name,onMove}: {game:PartyGame; active:boolean; nam
   },[submitted])
   const fire=(p=point)=>{
     if(!active || submitted===game.version)return
-    setShotError('');setSubmitted(game.version);setImpact({...p});setFlight(0)
+    setShotError('');setSubmitted(game.version)
     try {onMove(p)} catch(error) {setSubmitted(null);setShotError(error instanceof Error ? error.message : 'Shot could not be sent. Try again.')}
   }
   const updateDrag=(event:React.PointerEvent<HTMLDivElement>)=>{
@@ -121,7 +121,7 @@ function AimGame({game,active,name,onMove}: {game:PartyGame; active:boolean; nam
   const surface=game.kind==='darts' ? 'Dartboard' : game.kind==='basketball' ? 'Basketball court' : 'Cup pong table'
   return <div className="party-aim-game">{shotError && <p role="alert">{shotError}</p>}
     <div className="party-scores">{game.players.map((player,index)=><span key={player} className={game.turn===index ? 'is-playing' : ''}>{name(player)} <strong>{scores[index] ?? '—'}</strong><small> · {shots[index] || 0} shots</small></span>)}</div>
-    {game.kind==='cup-pong' && <p className="small">{name(game.players[target])}’s rack · everyone gets twelve throws</p>}
+    {game.kind==='cup-pong' && <p className="small">{name(game.players[target]) === 'You' ? 'Your rack' : `${name(game.players[target])}’s rack`} · everyone gets twelve throws</p>}
     <div className={`party-aim party-aim-${game.kind} ${dragging ? 'is-dragging' : ''}`} role="img" aria-label={`${surface} with aiming crosshair at ${Math.round(point.x*100)}, ${Math.round(point.y*100)} percent`}
       onPointerDown={event=>{if(!active || steady || submitted===game.version)return;event.preventDefault();event.currentTarget.setPointerCapture?.(event.pointerId);drag.current={x:event.clientX,y:event.clientY,id:event.pointerId,point:{x:.5,y:.92}};setDragging(true)}}
       onPointerMove={updateDrag}

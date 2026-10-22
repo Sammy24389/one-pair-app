@@ -1,7 +1,9 @@
 apply plugin: 'com.android.application'
 
 def appVersion = new groovy.json.JsonSlurper().parse(file('../../package.json')).version
-def versionParts = appVersion.tokenize('.').collect { it as int }
+def versionCore = (appVersion =~ /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/)
+if (!versionCore.matches()) throw new GradleException("Invalid package version: ${appVersion}")
+def versionParts = (1..3).collect { versionCore.group(it) as int }
 def appVersionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
 
 android {

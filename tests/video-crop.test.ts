@@ -65,3 +65,16 @@ it('cleans up failed recorder startup without leaving timers or tracks',async()=
   await expect(cropVideo(source(),{x:0,y:0,width:800,height:400},new AbortController().signal)).rejects.toThrow('could not start')
   expect(stopTrack).toHaveBeenCalledOnce();expect(vi.getTimerCount()).toBe(0)
 })
+
+it('times out duration probing after three seconds and removes listeners',async()=>{
+  const video=source();Object.defineProperty(video,'duration',{value:Infinity})
+  const controller=new AbortController(),removeVideo=vi.spyOn(video,'removeEventListener'),removeAbort=vi.spyOn(controller.signal,'removeEventListener')
+  const pending=videoDuration(video,controller.signal),rejected=expect(pending).rejects.toThrow('Could not read video duration.')
+  await vi.advanceTimersByTimeAsync(2999)
+  expect(vi.getTimerCount()).toBe(1)
+  expect(removeVideo).not.toHaveBeenCalled()
+  await vi.advanceTimersByTimeAsync(1);await rejected
+  expect(vi.getTimerCount()).toBe(0)
+  expect(removeVideo).toHaveBeenCalledWith('seeked',expect.any(Function))
+  expect(removeAbort).toHaveBeenCalledWith('abort',expect.any(Function))
+})

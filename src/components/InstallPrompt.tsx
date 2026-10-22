@@ -19,6 +19,6 @@ export default function InstallPrompt({suppressed = false}: {suppressed?: boolea
       <p className="tiny muted">Installation is optional. Your existing browser data stays on this device; another browser or device has separate data. Installation does not guarantee delivery when the app is closed.</p>
     </div>}
     {state.message && <p role="status">{state.message}</p>}
-    <div className="install-prompt-actions">{(!state.expanded || state.available) && <button className="btn" disabled={state.busy} onClick={() => void installPwa()}><Download size={17} />{state.busy ? 'Opening installer…' : state.available ? 'Install OnePair' : 'How to install'}</button>}<button className="btn ghost" disabled={state.busy} onClick={dismissInstall}>Continue in browser</button></div>
+    <div className="install-prompt-actions"><button className="btn" disabled={state.busy} onClick={() => void installPwa()}><Download size={17} />{state.busy ? 'Opening installer…' : state.available ? 'Install OnePair' : 'How to install'}</button><button className="btn ghost" disabled={state.busy} onClick={dismissInstall}>Continue in browser</button></div>
   </aside>
 }

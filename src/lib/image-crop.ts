@@ -19,6 +19,7 @@ export function validateCrop(width:number,height:number,crop:CropRect) {
   if (![width,height,crop.x,crop.y,crop.width,crop.height].every(Number.isFinite) || width<=0 || height<=0 || crop.x<0 || crop.y<0 || crop.width<=0 || crop.height<=0 || crop.x+crop.width>width+0.01 || crop.y+crop.height>height+0.01) throw new Error('Invalid crop selection.')
 }
 export type CropEdge = 'left' | 'right' | 'top' | 'bottom'
+// Coordinates and dimensions for border resizing are normalized to the 0–1 range.
 export function resizeCrop(crop:CropRect,edge:CropEdge,value:number):CropRect {
   if (!Number.isFinite(value)) return crop
   const next={...crop}, clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v))
