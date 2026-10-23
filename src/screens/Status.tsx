@@ -5,6 +5,7 @@ import {STATUS_TEXT_LIMIT, STATUS_LIFETIME, validateStatusMedia, type StatusReco
 import {deleteSharedStatus, pruneOwnStatuses, shareStatus, statusFeed} from '../lib/status-feed'
 import {pickFiles} from '../lib/media'
 import {StatusViewer} from '../components/StatusUpdates'
+import {StatusVideo} from '../components/StatusVideo'
 
 function StatusMedia({status}: {status: StatusRecord}) {
   const url = useMediaUrl(status.mediaId)
@@ -14,7 +15,7 @@ function StatusMedia({status}: {status: StatusRecord}) {
   if (failed) return <div><p role="alert">This device could not display this media. Try an MP4 video with H.264/AAC encoding.</p><button className="btn ghost" onClick={() => setFailed(false)}>Retry media</button></div>
   const style = {width: '100%', maxHeight: '55vh', objectFit: 'contain' as const, borderRadius: 12, marginTop: 12}
   return status.kind === 'video'
-    ? <video src={url} controls playsInline preload="metadata" aria-label="Status video" style={style} onError={() => setFailed(true)} />
+    ? <StatusVideo key={url} src={url} label="Status video" style={style} onError={() => setFailed(true)} />
     : <img src={url} alt={status.text || 'Status photo'} loading="lazy" style={style} onError={() => setFailed(true)} />
 }
 
@@ -27,7 +28,7 @@ function DraftMedia({file}: {file: File}) {
   }, [file])
   if (!url) return null
   const style = {width: '100%', maxHeight: 240, objectFit: 'contain' as const}
-  return file.type.startsWith('video/') ? <video src={url} controls playsInline preload="metadata" style={style} aria-label="Selected video preview" /> : <img src={url} alt="Selected photo preview" style={style} />
+  return file.type.startsWith('video/') ? <StatusVideo key={url} src={url} style={style} label="Selected video preview" /> : <img src={url} alt="Selected photo preview" style={style} />
 }
 
 export default function Status() {

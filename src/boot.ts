@@ -1,3 +1,4 @@
+import {initializeOpenPigeon} from './lib/openpigeon'
 import {groupEvents, groupRecoveryTargets, groupRegistry, hasGroupCall, initializeGroups, onGroupMessage} from './lib/groups'
 import {burst} from './components/Fx'
 import {TOUCHES} from './lib/content'
@@ -44,6 +45,7 @@ const viewingChat = (pairId: string) =>
 
 export const bootstrap = () => {
   initializeGroups()
+  void initializeOpenPigeon().catch(() => { /* The OpenPigeon card shows connection errors. */ })
   initAutoLock()
   initChannels()
 

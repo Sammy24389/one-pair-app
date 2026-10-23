@@ -1,0 +1,14 @@
+import {afterEach,it,expect,vi} from 'vitest'
+import {act,cleanup,fireEvent,render,screen} from '@testing-library/react'
+import SportsGames from '../src/components/SportsGames'
+import {createSportsData,type SportKind} from '../src/lib/sports-games'
+import type {PartyGame} from '../src/lib/game-types'
+afterEach(()=>{cleanup();vi.useRealTimers();vi.unstubAllGlobals()})
+const make=(kind:SportKind='darts'):PartyGame=>({id:'ui',kind,players:['a','b'],turn:0,version:0,winner:null,draw:false,data:createSportsData(kind,['a','b'],'ui')})
+function setup(kind:SportKind='darts',active=true){const onMove=vi.fn(),game=make(kind);render(<SportsGames game={game} active={active} me="a" name={id=>id} onMove={onMove}/>);return {onMove,game}}
+function pointer(){vi.stubGlobal('PointerEvent',MouseEvent);vi.spyOn(performance,'now').mockReturnValueOnce(100).mockReturnValueOnce(200).mockReturnValue(200);const arena=screen.getByRole('img');fireEvent.pointerDown(arena,{clientX:200,clientY:300,button:0,pointerId:1});return arena}
+it('releases a real throw on upward gesture without a shoot-button step',()=>{const {onMove}=setup();const arena=pointer();fireEvent.pointerMove(arena,{clientX:225,clientY:180,pointerId:1});fireEvent.pointerUp(arena,{clientX:225,clientY:180,pointerId:1});expect(onMove).toHaveBeenCalledTimes(1);expect(onMove.mock.calls[0][0]).toEqual(expect.objectContaining({aim:expect.any(Number),elevation:expect.any(Number),power:expect.any(Number)}));expect(onMove.mock.calls[0][0]).not.toHaveProperty('score');vi.restoreAllMocks()})
+it('cancels pointer gestures without throwing',()=>{const {onMove}=setup();const arena=pointer();fireEvent.pointerCancel(arena,{pointerId:1});fireEvent.pointerUp(arena,{clientX:200,clientY:160,pointerId:1});expect(onMove).not.toHaveBeenCalled();vi.restoreAllMocks()})
+it('prevents spectators throwing and keeps precision controls under disclosure',()=>{const {onMove}=setup('darts',false);fireEvent.click(screen.getByText('Keyboard / precision controls'));expect((screen.getByRole('button',{name:'Release shot'}) as HTMLButtonElement).disabled).toBe(true);fireEvent.click(screen.getByRole('button',{name:'Release shot'}));expect(onMove).not.toHaveBeenCalled()})
+it('requires explicitly starting the 60-second basketball round',()=>{const {onMove}=setup('basketball');fireEvent.click(screen.getByRole('button',{name:'Start my 60 seconds'}));expect(onMove).toHaveBeenCalledExactlyOnceWith({type:'start-round'})})
+it('allows retry when the host never confirms',()=>{vi.useFakeTimers();setup();fireEvent.click(screen.getByText('Keyboard / precision controls'));fireEvent.click(screen.getByRole('button',{name:'Release shot'}));act(()=>vi.advanceTimersByTime(4000));expect(screen.getByText(/No confirmation yet/)).toBeTruthy();expect((screen.getByRole('button',{name:'Release shot'}) as HTMLButtonElement).disabled).toBe(false)})

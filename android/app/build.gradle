@@ -7,10 +7,14 @@ def versionParts = (1..3).collect { versionCore.group(it) as int }
 def appVersionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionParts[2]
 
 android {
+    buildFeatures { aidl = true }
     namespace = "app.onepair.p2p"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "app.onepair.p2p"
+        def partnerTest = project.findProperty('onepairTestBuild') == 'true'
+        applicationId(partnerTest ? "app.onepair.p2p.openpigeontest" : "app.onepair.p2p")
+        manifestPlaceholders = [appLabel: partnerTest ? "Padi OpenPigeon Test" : "@string/app_name",
+                                activityLabel: partnerTest ? "Padi OpenPigeon Test" : "@string/title_activity_main"]
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Release CI may override these; local/debug builds use the same package version.

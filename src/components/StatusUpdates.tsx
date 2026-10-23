@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {createPortal} from 'react-dom'
 import {Plus, X} from 'lucide-react'
 import {useMediaUrl} from './ui'
+import {StatusVideo} from './StatusVideo'
 import {allSpaces, useSpaceIds} from '../lib/spaces'
 import {statusFeed} from '../lib/status-feed'
 import {push} from '../lib/nav'
@@ -19,7 +20,7 @@ export function StatusAsset({status, compact = false}: {status: StatusRecord; co
   if (failed && compact) return <span className="small muted">Preview unavailable</span>
   if (failed) return <div><p role="alert">This device could not display this media. Try an MP4 video with H.264/AAC encoding.</p><button className="btn ghost" onClick={() => setFailed(false)}>Retry media</button></div>
   return status.kind === 'video'
-    ? <video src={url} controls={!compact} muted={compact} playsInline preload="metadata" aria-label={compact ? 'Video status preview' : 'Status video'} onError={() => setFailed(true)} />
+    ? <StatusVideo key={url} src={url} compact={compact} label={compact ? 'Video status preview' : 'Status video'} onError={() => setFailed(true)} />
     : <img src={url} alt={status.text || 'Status photo'} loading="lazy" onError={() => setFailed(true)} />
 }
 

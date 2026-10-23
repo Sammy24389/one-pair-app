@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyPartyMove as move, createPartyGame as create, GAME_INFO, validPartyGame, CUP_TARGETS } from '../src/lib/party-games';
+import { applyPartyMove as move, createPartyGame as create, GAME_INFO, validPartyGame, CUP_TARGETS } from '../src/lib/legacy-party-games';
 const players = ['a', 'b'];
 describe('party games', () => {
   it('creates bounded valid independent states for every game', () => {
@@ -191,7 +191,7 @@ describe('party games', () => {
     expect(g.data.shots).toEqual([12,12]);
   });
 });
-import type { PartyGame } from '../src/lib/party-games';
+import type { PartyGame } from '../src/lib/legacy-party-games';
 function play(state: PartyGame, action: Record<string, unknown>) {
   const result = move(state, state.players[state.turn], action, state.version);
   expect(result).not.toBeNull();

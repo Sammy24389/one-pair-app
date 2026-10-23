@@ -1,0 +1,8 @@
+import {expect,it} from 'vitest'
+import {gestureShot} from '../src/lib/sport-gestures'
+import {simulateSport,validShot} from '../src/lib/sports-games'
+const start={x:200,y:300,t:0}
+it('maps flick direction and distance to bounded deterministic throws',()=>{for(const kind of ['darts','cup-pong','basketball'] as const){const a=gestureShot(kind,start,{x:220,y:180,t:200})!;expect(validShot(a)).toBe(true);expect(a.aim).toBeGreaterThan(0);expect(gestureShot(kind,start,{x:220,y:180,t:200})).toEqual(a);expect(gestureShot(kind,start,{x:200,y:330,t:200})).toBeNull();expect(gestureShot(kind,start,{x:200,y:299,t:200})).toBeNull()}})
+it('draws archery opposite the release direction and rejects taps or bad timing',()=>{expect(gestureShot('archery',start,{x:230,y:420,t:400})!.aim).toBeLessThan(0);expect(gestureShot('archery',start,{x:200,y:160,t:200})).toBeNull();for(const t of [0,19,5001,NaN,Infinity])expect(gestureShot('darts',start,{x:200,y:150,t})).toBeNull()})
+it('allows a center flick to hit a real target rather than forcing an unplayable launch angle',()=>{const shot=gestureShot('darts',start,{x:200,y:180,t:200})!;expect(simulateSport('darts',shot,0).score).toBeGreaterThan(0);expect(shot.elevation).toBeLessThan(20)})
+it('gives basketball flicks attainable baskets and responds to speed',()=>{let baskets=0;for(let distance=60;distance<=230;distance+=5)for(let duration=80;duration<600;duration+=20){const s=gestureShot('basketball',start,{x:200,y:300-distance,t:duration})!;baskets+=simulateSport('basketball',s,0).score}expect(baskets).toBeGreaterThan(0);expect(gestureShot('basketball',start,{x:200,y:150,t:100})!.power).toBeGreaterThan(gestureShot('basketball',start,{x:200,y:150,t:500})!.power)})

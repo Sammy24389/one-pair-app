@@ -48,6 +48,7 @@ export default defineConfig(({mode}) => ({
     rollupOptions: {
       output: {
         manualChunks: id => {
+          if (id.replaceAll('\\', '/').includes('/src/assets/words/')) return 'word-dictionary'
           if (id.includes('node_modules/leaflet')) return 'leaflet'
           if (id.includes('node_modules/yjs') || id.includes('node_modules/y-indexeddb') || id.includes('node_modules/lib0')) return 'yjs'
           if (id.includes('node_modules/@trystero-p2p') || id.includes('node_modules/trystero')) return 'p2p'

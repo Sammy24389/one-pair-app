@@ -3,13 +3,7 @@ import {useEffect, useRef, useState} from 'react'
 import type {PeerGroup} from '../lib/groups'
 import {groupEvents} from '../lib/groups'
 import {withSystemUi} from '../lib/platform'
-
-function SharedPlayer({stream, title}: {stream: MediaStream; title: string}) {
-  const ref = useRef<HTMLVideoElement>(null)
-  const [playing, setPlaying] = useState(false)
-  useEffect(() => {const el = ref.current!; el.srcObject = stream; return () => {el.srcObject = null}}, [stream])
-  return <article className="watch-player"><h3>{title}</h3><video ref={ref} playsInline controls aria-label={title} /><button className="btn primary" onClick={() => {void ref.current?.play().then(() => setPlaying(true)).catch(() => setPlaying(false))}}>{playing ? 'Resume shared playback' : 'Join playback with sound'}</button></article>
-}
+import SharedPlayer from './SharedPlayer'
 
 export default function WatchTogether({group}: {group: PeerGroup}) {
   groupEvents.use()
@@ -85,10 +79,11 @@ export default function WatchTogether({group}: {group: PeerGroup}) {
     } finally {if (request === generation.current) setBusy(false)}
   }
 
-  return <section className="room-watch card"><header><span className="small muted">WATCH & LISTEN</span><h2>One playback. Everyone together.</h2><p className="muted">Choose a local movie or song. Your playback controls the room; friends tap Join playback to hear it. Keep this room open.</p></header>
+  return <section className="room-watch card"><header><span className="small muted">WATCH & LISTEN</span><h2>One playback. Everyone together.</h2><p className="muted">Choose a video or song to share only its picture and sound. Friends tap Join playback to watch in a focused video view. Your playback controls the room.</p></header>
     {error && <p role="alert">{error}</p>}
-    <div className="room-actions"><button className="btn" disabled={busy} onClick={() => void screen()}>Share screen</button><label className="btn">Choose video or music<input type="file" accept="video/*,audio/*" disabled={busy} onChange={e => {const file=e.target.files?.[0]; if (!file) return; if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {setError('Choose a video or audio file.');return} if(file.size>1024*1024*1024) {setError('Choose media smaller than 1 GB.');return} stop(); setSource({url:URL.createObjectURL(file),name:file.name});setError('');e.target.value=''}} /></label></div>
-    {source && <div className="watch-player"><h3>{source.name}</h3><video key={source.url+revision} ref={player} src={source.url} controls playsInline preload="metadata" onError={() => setError('This media format cannot play on this device. Try MP4 video or MP3 audio.')} /><button className="btn primary" disabled={busy || !!group.presentation} onClick={() => void broadcast()}>{busy ? 'Preparing playback...' : 'Share this playback'}</button></div>}
+    <div className="room-actions"><label className="btn primary">Choose video or music<input type="file" accept="video/*,audio/*" disabled={busy} onChange={e => {const file=e.target.files?.[0]; if (!file) return; if (!file.type.startsWith('video/') && !file.type.startsWith('audio/')) {setError('Choose a video or audio file.');return} if(file.size>1024*1024*1024) {setError('Choose media smaller than 1 GB.');return} stop(); setSource({url:URL.createObjectURL(file),name:file.name});setError('');e.target.value=''}} /></label></div>
+    <details className="watch-screen-option"><summary>Share a screen instead</summary><p className="small muted">This sends the selected screen or app, including its interface. For a movie without the app around it, choose the video file above.</p><button className="btn" disabled={busy} onClick={() => void screen()}>Share screen</button></details>
+    {source && <div className="watch-player"><h3>{source.name}</h3><p className="small muted">Only this media is sent. Your app, messages and controls stay on your device.</p><video key={source.url+revision} ref={player} src={source.url} controls playsInline preload="metadata" onError={() => setError('This media format cannot play on this device. Try MP4 video or MP3 audio.')} /><button className="btn primary" disabled={busy || !!group.presentation} onClick={() => void broadcast()}>{busy ? 'Preparing playback...' : 'Share this playback'}</button></div>}
     {group.presentation && <button className="btn danger" onClick={() => stop()}>Stop sharing</button>}
     {[...group.shared.entries()].map(([id,item]) => <SharedPlayer key={id+item.stream.id} {...item} />)}
     {!group.shared.size && !group.presentation && <p className="room-empty">No one is sharing yet.</p>}

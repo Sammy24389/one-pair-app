@@ -119,3 +119,20 @@ it('remounts the media element after a room stops sharing externally',async()=>{
   await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Share this playback'}))})
   expect(room.present).toHaveBeenCalledTimes(2)
 })
+
+it('captures only the chosen video element without requesting a display capture',async()=>{
+  vi.spyOn(HTMLVideoElement.prototype,'videoWidth','get').mockReturnValue(1920)
+  vi.spyOn(HTMLVideoElement.prototype,'videoHeight','get').mockReturnValue(1080)
+  const draw=vi.fn(),display=vi.fn()
+  vi.stubGlobal('navigator',{mediaDevices:{getDisplayMedia:display}})
+  vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue({drawImage:draw} as never)
+  Object.defineProperty(HTMLCanvasElement.prototype,'captureStream',{configurable:true,value:vi.fn(()=>new Stream([new Track()]))})
+  const room=group(),view=render(<WatchTogether group={room as unknown as PeerGroup}/>);selectSource()
+  const video=view.container.querySelector('video')
+  await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Share this playback'}))})
+  const paint=vi.mocked(requestAnimationFrame).mock.calls[0][0]
+  act(()=>paint(100))
+  expect(draw).toHaveBeenCalledWith(video,0,0,1280,720)
+  expect(display).not.toHaveBeenCalled()
+  expect(room.present).toHaveBeenCalledOnce()
+})

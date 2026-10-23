@@ -10,9 +10,12 @@ import {fromB64, toB64, uid} from './util'
 import {iceServers, settings} from './settings'
 import {nativeBridge} from './native'
 import {isAppHidden, withSystemUi} from './platform'
+import * as platformState from './platform'
+import {normalizeOpenPigeonMessage, normalizeOpenPigeonSession, openPigeonParticipants, OPENPIGEON_PROTOCOL, OPENPIGEON_MAX_SESSIONS, OPENPIGEON_RETENTION_MS, type OpenPigeonMessage, type OpenPigeonSession} from './openpigeon-protocol'
 import {idbGet, idbPut, idbDel} from './idb'
 import {claimMedia, releaseMedia} from './media-lease'
-import {applyPartyMove, createPartyGame, validPartyGame, type GameKind, type PartyGame} from './party-games'
+import {basketballRoundRunning,isTimedBasketball,BASKETBALL_ROUND_MS} from './sports-games'
+import {applyPartyMove, createPartyGame, validPartyGame, GAME_PROTOCOL, type GameKind, type PartyGame} from './party-games'
 
 export type GroupRecord = {id: string; secret: string; title: string; owner: string}
 export type GroupMessage = {id: string; from: string; name: string; text: string; ts: number}
@@ -25,6 +28,13 @@ export const onGroupMessage = (listener: (group: PeerGroup, message: GroupMessag
   messageListeners.add(listener)
   return () => messageListeners.delete(listener)
 }
+const openPigeonListeners = new Set<(group: PeerGroup, session: OpenPigeonSession) => void>()
+export function onOpenPigeonMessage(listener: (group: PeerGroup, session: OpenPigeonSession) => void) {
+  openPigeonListeners.add(listener)
+  return () => {openPigeonListeners.delete(listener)}
+}
+const androidGames = () => Object.hasOwn(platformState, 'isNative') && Object.hasOwn(platformState, 'platform') && platformState.isNative === true && platformState.platform === 'android'
+const eventLimit = (type: unknown) => type === 'party-state' ? 120000 : type === 'pigeon-state' || type === 'pigeon-request' ? 110000 : 60000
 const bump = () => groupEvents.set(s => ({version: s.version + 1}))
 const validId = (v: unknown): v is string => typeof v === 'string' && /^[a-zA-Z0-9_-]{8,100}$/.test(v)
 export function parseGroupInvitation(raw: string): GroupRecord {
@@ -61,6 +71,7 @@ export async function forgetGroup(id: string) {
   const group = instances.get(id)
   await group?.destroy()
   await idbDel('kv', 'group.messages.' + id)
+  await idbDel('kv', 'group.openpigeon.' + id)
   instances.delete(id)
   groupRegistry.set(s => ({records: s.records.filter(r => r.id !== id)}))
 }
@@ -71,11 +82,16 @@ export function raceMove(race: Race, actor: string, amount: number, version: num
 }
 export class PeerGroup {
   room: Room | null = null
-  peers = new Map<string, {device: string; name: string}>()
+  peers = new Map<string, {device: string; name: string; games?: number; openpigeon?: number}>()
   messages: GroupMessage[] = []
   race: Race | null = null
+  openPigeonSessions: OpenPigeonSession[] = []
+  private pigeonSeen = new Map<string, string[]>()
+  private pigeonStorageError: Error | null = null
+  private pigeonPending = new Map<string, {session: string; revision: number; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>}>()
   party: PartyGame | null = null
   private partySequence = 0
+  private basketballClock: {key:string;start:number;timer:ReturnType<typeof setTimeout>} | null = null
   private connecting: Promise<void> | null = null
   private connectionGeneration = 0
   local: MediaStream | null = null
@@ -109,6 +125,7 @@ export class PeerGroup {
   }
   async reconnect() {
     if (this.disposed || this.connected || this.local || this.joining || this.presentation) return
+    this.rejectOpenPigeonPending('The group is reconnecting. Reopen the latest game and retry.')
     this.stopPresentation(); this.shared.clear(); this.remote.clear()
     ++this.connectionGeneration
     this.connecting = null
@@ -128,10 +145,13 @@ export class PeerGroup {
   private async openConnection(connectionGeneration: number) {
     const saved = await idbGet<GroupMessage[]>('kv', 'group.messages.' + this.record.id)
     if (this.disposed || connectionGeneration !== this.connectionGeneration) return
+    const pigeonSaved = await idbGet<unknown>('kv', 'group.openpigeon.' + this.record.id)
+    if (this.disposed || connectionGeneration !== this.connectionGeneration) return
+    this.loadOpenPigeon(pigeonSaved)
     this.merge(Array.isArray(saved) ? saved.filter(validMessage).slice(-300) : [])
     const password = await hkdfHex(fromB64(this.record.secret), 'group-password')
     if (this.disposed || connectionGeneration !== this.connectionGeneration) return
-    const room = joinRoom({appId: 'padi-groups-v1', password, rtcConfig: {iceServers: iceServers()}, maxReceiveBytes: 64 * 1024}, this.record.id, {
+    const room = joinRoom({appId: 'padi-groups-v1', password, rtcConfig: {iceServers: iceServers()}, maxReceiveBytes: 128 * 1024}, this.record.id, {
       handshakeTimeoutMs: 15000,
       onPeerHandshake: async (_id, send, receive) => {
         if (this.disposed || connectionGeneration !== this.connectionGeneration) throw new Error('Group connection changed.')
@@ -140,22 +160,22 @@ export class PeerGroup {
         try {
           const nonce = uid(24)
           const device = identity.get().deviceId
-          await send({device, name: identity.get().profile.name.slice(0, 60), nonce})
+          await send({device, name: identity.get().profile.name.slice(0, 60), nonce, games: GAME_PROTOCOL, openpigeon: androidGames() ? OPENPIGEON_PROTOCOL : 0})
           const {data} = await receive()
-          const hello = data as {device: string; name: string; nonce: string}
+          const hello = data as {device: string; name: string; nonce: string; games?: number; openpigeon?: number}
           if (!validId(hello?.device) || !validId(hello.nonce) || typeof hello.name !== 'string' || hello.name.length > 60 || hello.device === device || [...this.peers.values()].some(p => p.device === hello.device)) throw new Error('Invalid group participant.')
           await send({mac: await hmacHex(fromB64(this.record.secret), hello.nonce + '|' + device)})
           const proof = (await receive()).data as {mac: string}
           if (typeof proof?.mac !== 'string' || !timingSafeEqual(proof.mac, await hmacHex(fromB64(this.record.secret), nonce + '|' + hello.device))) throw new Error('Invalid group proof.')
           if (this.disposed || connectionGeneration !== this.connectionGeneration) throw new Error('Group was closed.')
-          this.peers.set(_id, {device: hello.device, name: hello.name})
+          this.peers.set(_id, {device: hello.device, name: hello.name, games: hello.games === GAME_PROTOCOL ? GAME_PROTOCOL : undefined, openpigeon: hello.openpigeon === OPENPIGEON_PROTOCOL ? OPENPIGEON_PROTOCOL : undefined})
         } finally { if (connectionGeneration === this.connectionGeneration) this.pending-- }
       }
     })
     this.room = room
     const action = room.makeAction<string>('event')
-    this.send = (event, target) => { try { const raw = JSON.stringify(event); if (new TextEncoder().encode(raw).byteLength > 60000) throw new Error('Group event is too large.'); void action.send(raw, target ? {target} : undefined).catch(e => this.fail(e)) } catch(e) { this.fail(e) } }
-    action.onMessage = (raw, {peerId}) => { if (this.room !== room || typeof raw !== 'string' || raw.length > 60000) return; try { this.receive(JSON.parse(raw), peerId) } catch { /* Ignore malformed peer events. */ } }
+    this.send = (event, target) => { try { const raw = JSON.stringify(event); if (new TextEncoder().encode(raw).byteLength > eventLimit(event.type)) throw new Error('Group event is too large.'); void action.send(raw, target ? {target} : undefined).catch(e => this.fail(e)) } catch(e) { this.fail(e) } }
+    action.onMessage = (raw, {peerId}) => { if (this.room !== room || typeof raw !== 'string' || raw.length > 120000) return; try { this.receive(JSON.parse(raw), peerId) } catch { /* Ignore malformed peer events. */ } }
     room.onPeerJoin = peerId => {
       if (this.room !== room) return
       if (this.peers.size > 3) { this.peers.delete(peerId); return }
@@ -164,13 +184,17 @@ export class PeerGroup {
       if (this.presentation) {try {void Promise.all(room.addStream(this.presentation, {target: peerId, metadata: {padi: 'presentation', title: this.presentationTitle}})).catch(e => this.fail(e))} catch(e) {this.fail(e)}}
       this.send?.({type: 'call', joined: !!this.local}, peerId)
       if (identity.get().deviceId === this.record.owner && this.race) this.send?.({type: 'race', race: this.race}, peerId)
-      if (identity.get().deviceId === this.record.owner) this.sendParty(peerId)
+      if (identity.get().deviceId === this.record.owner) {
+        this.sendParty(peerId)
+        this.pruneOpenPigeon()
+        for (const session of this.openPigeonSessions) this.sendOpenPigeon(session,true,peerId)
+      }
       bump()
     }
     room.onPeerLeave = peerId => {
       if (this.room !== room) return
       const left = this.peers.get(peerId)
-      if (left?.device === this.record.owner) this.partySequence = -1
+      if (left?.device === this.record.owner) {this.partySequence = -1; this.rejectOpenPigeonPending('The group creator disconnected. Reconnect and retry.')}
       clearTimeout(this.historyTimers.get(peerId)); this.historyTimers.delete(peerId)
       this.peers.delete(peerId); this.callers.delete(peerId); this.remote.delete(peerId); this.shared.delete(peerId); this.rates.delete(peerId)
       this.connected = this.peers.size > 0
@@ -206,19 +230,35 @@ export class PeerGroup {
   }
   private receive(event: Record<string, unknown>, peerId: string) {
     const peer = this.peers.get(peerId)
-    if (!peer || !event || typeof event !== 'object' || JSON.stringify(event).length > 60000) return
+    if (!peer || !event || typeof event !== 'object' || JSON.stringify(event).length > eventLimit(event.type)) return
     const now = Date.now(); const rate = this.rates.get(peerId)
     if (!rate || now - rate.at > 10000) this.rates.set(peerId, {at: now, count: 1})
     else if (++rate.count > 60) return
-    if (event.type === 'party-state' && peer.device === this.record.owner) {
+    if (event.type === 'pigeon-state' && peer.device === this.record.owner) {
+      const session = normalizeOpenPigeonSession(event.session, this.record.owner)
+      if (session && session.participants.includes(identity.get().deviceId) && session.updatedAt >= now - OPENPIGEON_RETENTION_MS) this.acceptOpenPigeonState(session, event.replay === true)
+    } else if (event.type === 'pigeon-request' && identity.get().deviceId === this.record.owner) {
+      const message = normalizeOpenPigeonMessage(event.message)
+      if (!message) return
+      try {this.hostOpenPigeon(event.participants, message, peer.device, event.revision)}
+      catch (error) {
+        const latest = this.openPigeonSessions.find(session => session.id === message.session)
+        if (latest) this.sendOpenPigeon(latest,true,peerId)
+        this.send?.({type:'pigeon-rejected', messageGuid:message.messageGuid, session:message.session, reason:error instanceof Error ? error.message : 'Game update rejected.'}, peerId)
+      }
+    } else if (event.type === 'pigeon-rejected' && peer.device === this.record.owner) {
+      if (typeof event.messageGuid !== 'string') return
+      const pending = this.pigeonPending.get(event.messageGuid)
+      if (pending && pending.session === event.session) {clearTimeout(pending.timer); this.pigeonPending.delete(event.messageGuid); pending.reject(new Error(typeof event.reason === 'string' ? event.reason.slice(0,200) : 'Game update rejected.'))}
+    } else if (event.type === 'party-state' && peer.device === this.record.owner) {
       if (!Number.isSafeInteger(event.sequence) || (event.sequence as number) < 0 || (event.sequence as number) <= this.partySequence) return
       if (event.game !== null && (!validPartyGame(event.game) || !event.game.players.includes(this.record.owner))) return
       this.party = event.game as PartyGame | null
       this.partySequence = event.sequence as number
     } else if (event.type === 'party-move' && identity.get().deviceId === this.record.owner) {
       if (!this.party || event.gameId !== this.party.id || !this.partyReady() || !event.move || typeof event.move !== 'object' || Array.isArray(event.move)) return
-      const next = applyPartyMove(this.party, peer.device, event.move as Record<string, unknown>, event.version as number)
-      if (next) {this.party = next; this.partySequence++; this.sendParty()}
+      const next = this.hostPartyMove(peer.device, event.move as Record<string, unknown>, event.version as number)
+      if (next) this.publishParty(next)
     } else if (event.type === 'message' && validMessage(event.message)) {
       const message = event.message
       if (message.from !== peer.device || Math.abs(now - message.ts) > 300000) return
@@ -280,32 +320,181 @@ export class PeerGroup {
       if (next) { this.race = next; this.send?.({type: 'race', race: next}); bump() }
     } else this.send?.({type: 'move', amount, version: this.race.version})
   }
+  openPigeonReady(participants: string[]) {
+    if (this.disposed || !androidGames() || !openPigeonParticipants(participants) || !participants.includes(this.record.owner) || !participants.includes(identity.get().deviceId)) return false
+    return participants.every(id => id === identity.get().deviceId || [...this.peers.values()].some(peer => peer.device === id && peer.openpigeon === OPENPIGEON_PROTOCOL))
+  }
+  async openPigeonMessage(participants: string[], input: OpenPigeonMessage): Promise<void> {
+    const message = normalizeOpenPigeonMessage(input)
+    if (!message) throw new Error('Invalid or oversized OpenPigeon game message.')
+    if (!this.openPigeonReady(participants)) throw new Error('Connect the creator and all selected players using the Android app first.')
+    const existing = this.openPigeonSessions.find(session => session.id === message.session)
+    if (identity.get().deviceId === this.record.owner) {
+      this.hostOpenPigeon(participants, message, identity.get().deviceId, existing?.revision ?? 0)
+      await this.saving
+      if (this.pigeonStorageError) throw this.pigeonStorageError
+      return
+    }
+    if (!existing) throw new Error('The group creator must start this game first.')
+    if (this.pigeonPending.has(message.messageGuid)) throw new Error('This game update is already awaiting confirmation.')
+    const owner = [...this.peers].find(([,peer]) => peer.device === this.record.owner)?.[0]
+    if (!owner || !this.send) throw new Error('Wait for the group creator to reconnect.')
+    return new Promise<void>((resolve,reject) => {
+      const timer = setTimeout(() => {this.pigeonPending.delete(message.messageGuid); reject(new Error('The creator did not confirm this game update. Reopen the latest game and retry.'))},12000)
+      this.pigeonPending.set(message.messageGuid,{session:message.session,revision:existing.revision + 1,resolve,reject,timer})
+      this.send?.({type:'pigeon-request',participants:[...participants],message,revision:existing.revision},owner)
+    })
+  }
+  private hostOpenPigeon(participants: unknown, message: OpenPigeonMessage, author: string, revision: unknown) {
+    this.pruneOpenPigeon()
+    if (!openPigeonParticipants(participants) || !participants.includes(author) || !this.openPigeonReady(participants)) throw new Error('Connect all selected Android players before updating this game.')
+    const existing = this.openPigeonSessions.find(session => session.id === message.session)
+    if (!existing && author !== this.record.owner) throw new Error('The group creator must start this game first.')
+    if (existing && JSON.stringify(participants) !== JSON.stringify(existing.participants)) throw new Error('The players in this game cannot be changed.')
+    if (existing?.message.messageGuid === message.messageGuid && JSON.stringify(existing.message) === JSON.stringify(message)) {
+      if (this.pigeonStorageError) this.saveOpenPigeon()
+      this.sendOpenPigeon(existing,true)
+      return
+    }
+    if (!Number.isSafeInteger(revision) || revision !== (existing?.revision ?? 0)) throw new Error('This game has changed. Reopen its latest update.')
+    if ((existing?.revision ?? 0) >= 100000) throw new Error('Start a new game.')
+    if (this.pigeonSeen.get(message.session)?.includes(message.messageGuid)) throw new Error('This game update was already processed.')
+    const session: OpenPigeonSession = {id:message.session,participants:[...participants],revision:(existing?.revision ?? 0) + 1,author,message,updatedAt:Date.now()}
+    this.acceptOpenPigeonState(session,false)
+    this.sendOpenPigeon(session,false)
+  }
+  private sendOpenPigeon(session: OpenPigeonSession, replay: boolean, target?: string) {
+    for (const [peerId,peer] of this.peers) if ((!target || target === peerId) && session.participants.includes(peer.device)) this.send?.({type:'pigeon-state',session,replay},peerId)
+  }
+  private acceptOpenPigeonState(session: OpenPigeonSession, replay: boolean) {
+    const existing = this.openPigeonSessions.find(saved => saved.id === session.id)
+    if (existing && (session.revision <= existing.revision || JSON.stringify(existing.participants) !== JSON.stringify(session.participants))) {
+      if (session.revision === existing.revision && JSON.stringify(existing) === JSON.stringify(session)) this.confirmOpenPigeon(session)
+      return
+    }
+    if (this.pigeonSeen.get(session.id)?.includes(session.message.messageGuid)) return
+    this.openPigeonSessions = [session,...this.openPigeonSessions.filter(saved => saved.id !== session.id)]
+    this.pigeonSeen.set(session.id,[...(this.pigeonSeen.get(session.id) ?? []),session.message.messageGuid].slice(-128))
+    this.pruneOpenPigeon()
+    this.saveOpenPigeon()
+    this.confirmOpenPigeon(session)
+    if (!replay && session.participants.includes(identity.get().deviceId)) openPigeonListeners.forEach(listener => {try {listener(this,session)} catch { /* Notification failure must not roll back an accepted update. */ }})
+    bump()
+  }
+  private confirmOpenPigeon(session: OpenPigeonSession) {
+    const pending = this.pigeonPending.get(session.message.messageGuid)
+    if (pending && pending.session === session.id && pending.revision === session.revision && session.author === identity.get().deviceId) {
+      clearTimeout(pending.timer); this.pigeonPending.delete(session.message.messageGuid)
+      void this.saving.then(() => {if (this.pigeonStorageError) pending.reject(this.pigeonStorageError); else pending.resolve()})
+    }
+  }
+  private pruneOpenPigeon() {
+    this.openPigeonSessions = this.openPigeonSessions.filter(session => session.updatedAt >= Date.now() - OPENPIGEON_RETENTION_MS).sort((a,b) => b.updatedAt - a.updatedAt).slice(0,OPENPIGEON_MAX_SESSIONS)
+    const active = new Set(this.openPigeonSessions.map(session => session.id))
+    for (const id of this.pigeonSeen.keys()) if (!active.has(id)) this.pigeonSeen.delete(id)
+  }
+  private saveOpenPigeon() {
+    const snapshot = {sessions:this.openPigeonSessions,seen:Object.fromEntries(this.pigeonSeen)}
+    this.saving = this.saving.catch(() => {}).then(async () => {
+      try {await idbPut('kv','group.openpigeon.' + this.record.id,snapshot); this.pigeonStorageError = null}
+      catch {this.pigeonStorageError = new Error('This game update could not be saved on your device. Free storage and retry.'); this.fail(this.pigeonStorageError)}
+    })
+  }
+  private loadOpenPigeon(value: unknown) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return
+    const stored = value as {sessions?:unknown;seen?:unknown}
+    if (!Array.isArray(stored.sessions)) return
+    for (const value of stored.sessions.slice(0,OPENPIGEON_MAX_SESSIONS)) {
+      const session = normalizeOpenPigeonSession(value,this.record.owner)
+      if (!session || session.updatedAt < Date.now() - OPENPIGEON_RETENTION_MS) continue
+      const current = this.openPigeonSessions.find(saved => saved.id === session.id)
+      if (!current || session.revision > current.revision) this.openPigeonSessions = [...this.openPigeonSessions.filter(saved => saved.id !== session.id),session]
+      const seen = stored.seen && typeof stored.seen === 'object' && !Array.isArray(stored.seen) ? (stored.seen as Record<string,unknown>)[session.id] : undefined
+      const guids = Array.isArray(seen) ? seen.slice(-128).filter((id): id is string => typeof id === 'string' && /^[\x21-\x7e]{1,100}$/.test(id)) : []
+      this.pigeonSeen.set(session.id,[...new Set([...(this.pigeonSeen.get(session.id) ?? []),...guids,session.message.messageGuid])].slice(-128))
+    }
+    this.pruneOpenPigeon()
+    this.saveOpenPigeon()
+    bump()
+  }
+  private rejectOpenPigeonPending(reason: string) {
+    for (const pending of this.pigeonPending.values()) {clearTimeout(pending.timer); pending.reject(new Error(reason))}
+    this.pigeonPending.clear()
+  }
+  private clearBasketballClock() {
+    if (this.basketballClock) clearTimeout(this.basketballClock.timer)
+    this.basketballClock = null
+  }
+  private publishParty(next: PartyGame) {
+    this.party = next; this.partySequence++
+    this.syncBasketballClock()
+    this.sendParty(); bump()
+  }
+  private syncBasketballClock() {
+    if (!this.party || !basketballRoundRunning(this.party)) {this.clearBasketballClock(); return}
+    const key = this.party.id + ':' + this.party.turn
+    if (this.basketballClock?.key === key) return
+    this.clearBasketballClock()
+    const start = performance.now()
+    const expire = () => {
+      if (this.disposed || !this.party || !basketballRoundRunning(this.party) || this.basketballClock?.key !== key || identity.get().deviceId !== this.record.owner) return
+      const remaining = BASKETBALL_ROUND_MS - (performance.now() - start)
+      if (remaining > 0) {this.basketballClock.timer = setTimeout(expire, remaining); return}
+      const next = applyPartyMove(this.party, this.party.players[this.party.turn], {type:'finish-round',elapsed:BASKETBALL_ROUND_MS}, this.party.version)
+      if (next) this.publishParty(next)
+      else {this.clearBasketballClock(); this.fail(new Error('The basketball round could not finish. Start a new match.'))}
+    }
+    this.basketballClock = {key,start,timer:setTimeout(expire,BASKETBALL_ROUND_MS)}
+  }
+  private hostPartyMove(actor:string, move:Record<string,unknown>, version:number) {
+    if (!this.party || this.party.version !== version || this.party.players[this.party.turn] !== actor) return null
+    if (isTimedBasketball(this.party) && basketballRoundRunning(this.party)) {
+      const clock = this.basketballClock
+      if (!clock || clock.key !== this.party.id + ':' + this.party.turn) return null
+      const elapsed = Math.floor(performance.now() - clock.start)
+      if (move.type === 'finish-round' && elapsed < BASKETBALL_ROUND_MS) return null
+      if (elapsed >= BASKETBALL_ROUND_MS) {
+        const ended = applyPartyMove(this.party,actor,{type:'finish-round',elapsed:BASKETBALL_ROUND_MS},version)
+        if (ended) this.publishParty(ended)
+        return null
+      }
+      move = {...move,elapsed}
+    }
+    return applyPartyMove(this.party,actor,move,version)
+  }
   private sendParty(target?: string) {
     this.send?.({type: 'party-state', sequence: this.partySequence, game: this.party}, target)
   }
+  partyCompatible() {
+    return !this.party || this.party.data.collectionVersion !== GAME_PROTOCOL || this.party.players.every(id => id === identity.get().deviceId || [...this.peers.values()].some(peer => peer.device === id && peer.games === GAME_PROTOCOL))
+  }
   partyReady() {
     const online = new Set([identity.get().deviceId, ...[...this.peers.values()].map(p => p.device)])
-    return online.has(this.record.owner) && !!this.party && this.party.players.every(id => online.has(id))
+    return online.has(this.record.owner) && !!this.party && this.partyCompatible() && this.party.players.every(id => online.has(id))
   }
   startParty(kind: GameKind, players: string[]) {
     if (this.disposed || identity.get().deviceId !== this.record.owner) throw new Error('The group creator starts games.')
     const online = new Set([identity.get().deviceId, ...[...this.peers.values()].map(p => p.device)])
     if (!Array.isArray(players) || !players.includes(this.record.owner) || players.some(id => !online.has(id))) throw new Error('Choose connected players, including the creator.')
-    this.party = createPartyGame(kind, players, uid(16))
+    if (players.some(id => id !== identity.get().deviceId && ![...this.peers.values()].some(peer => peer.device === id && peer.games === GAME_PROTOCOL))) throw new Error('All selected players must update the app before starting these games.')
+    const next = createPartyGame(kind, players, uid(16))
+    this.clearBasketballClock()
+    this.party = next
     this.partySequence++
     this.sendParty()
     bump()
   }
   partyMove(move: Record<string, unknown>) {
     if (this.disposed || !this.party || !this.partyReady()) throw new Error('Wait for the creator and all players to reconnect.')
-    const next = applyPartyMove(this.party, identity.get().deviceId, move, this.party.version)
-    if (!next) throw new Error('That move is not allowed. Check the rules and whose turn it is.')
     if (identity.get().deviceId === this.record.owner) {
-      this.party = next
-      this.partySequence++
-      this.sendParty()
-      bump()
-    } else this.send?.({type: 'party-move', gameId: this.party.id, version: this.party.version, move})
+      const next = this.hostPartyMove(identity.get().deviceId, move, this.party.version)
+      if (!next) throw new Error('That move is not allowed. Check the rules and whose turn it is.')
+      this.publishParty(next)
+    } else {
+      const next = applyPartyMove(this.party, identity.get().deviceId, move, this.party.version)
+      if (!next) throw new Error('That move is not allowed. Check the rules and whose turn it is.')
+      this.send?.({type: 'party-move', gameId: this.party.id, version: this.party.version, move})
+    }
   }
   async joinCall(video: boolean) {
     if (this.disposed || this.local || this.joining || hasGroupCall() || !this.room) throw new Error('Finish the current call before joining another.')
@@ -353,7 +542,7 @@ export class PeerGroup {
     }
     this.local = null; this.remote.clear(); releaseMedia(this); this.send?.({type: 'call', joined: false}); bump()
   }
-  async destroy() { this.stopPresentation(); this.disposed = true; ++this.connectionGeneration; this.historyTimers.forEach(clearTimeout); this.historyTimers.clear(); this.leaveCall(); await this.room?.leave(); this.room = null; await this.saving }
+  async destroy() { this.rejectOpenPigeonPending('The group was closed.'); this.clearBasketballClock(); this.stopPresentation(); this.disposed = true; ++this.connectionGeneration; this.historyTimers.forEach(clearTimeout); this.historyTimers.clear(); this.leaveCall(); await this.room?.leave(); this.room = null; await this.saving }
 }
 function validMessage(v: unknown): v is GroupMessage {
   const m = v as GroupMessage

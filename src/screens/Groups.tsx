@@ -1,3 +1,5 @@
+import OpenPigeonRoom from '../components/OpenPigeonRoom'
+import {openPigeonState} from '../lib/openpigeon'
 import WatchTogether from '../components/WatchTogether'
 import '../styles/groups.css'
 import {useEffect, useRef, useState} from 'react'
@@ -49,6 +51,7 @@ export function GroupsCallOverlay({locked = false}: {locked?: boolean}) {
   </div>
 }
 export default function Groups() {
+  const androidGames = openPigeonState.use(s => s.supported)
   const {records} = groupRegistry.use()
   groupEvents.use()
   const [selected, setSelected] = useState<string | null>(null)
@@ -127,11 +130,14 @@ export default function Groups() {
       <nav className="room-tabs" aria-label="Room sections">{(['play','chat','watch'] as const).map(tab => <button key={tab} className="btn" aria-current={section === tab ? 'page' : undefined} onClick={() => setSection(tab)}>{tab === 'play' ? 'Games' : tab === 'chat' ? `Chat${section !== 'chat' && !!latestMessage && latestMessage !== readMessages[group.record.id] ? ' · New' : ''}` : 'Watch & listen'}</button>)}</nav>
       <div hidden={section !== 'watch'}><WatchTogether key={group.record.id} group={group} /></div>
       <div hidden={section !== 'play'}>
-      <PartyGames game={group.party}
+      <OpenPigeonRoom group={group} />
+      <details open={!androidGames} className="room-built-in-games"><summary>Built-in games</summary>
+      <PartyGames game={group.party} compatible={group.partyCompatible()}
         players={[{id: identity.get().deviceId, name: identity.get().profile.name || 'You'}, ...[...group.peers.values()].map(peer => ({id: peer.device, name: peer.name || 'Friend'}))]}
         me={identity.get().deviceId} isHost={group.record.owner === identity.get().deviceId}
         onStart={(kind, players) => run(() => group.startParty(kind, players))}
         onMove={move => run(() => group.partyMove(move))} error={error} />
+      </details>
       </div>
       <section hidden={section !== 'chat'} className="room-conversation">
       <div className="room-messages" role="log" aria-label="Group messages">{group.messages.length === 0 && <p className="muted">Send the first message.</p>}{group.messages.map(m => <div key={m.id} className={`room-bubble ${m.from === identity.get().deviceId ? 'mine' : ''}`}><strong className="small">{m.name || 'Friend'}</strong><p style={{whiteSpace: 'pre-wrap', margin: '4px 0'}}>{m.text}</p></div>)}</div>

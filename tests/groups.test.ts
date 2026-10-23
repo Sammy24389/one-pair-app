@@ -1,5 +1,6 @@
 import {afterEach, expect, it, vi} from 'vitest'
 import {PeerGroup, groupInvitation, parseGroupInvitation, raceMove, type Race} from '../src/lib/groups'
+import {identity} from '../src/lib/identity'
 import {claimMedia, releaseMedia} from '../src/lib/media-lease'
 vi.mock('trystero', () => ({joinRoom: vi.fn()}))
 vi.mock('../src/lib/crypto', () => ({hkdfHex: vi.fn(async () => 'password')}))
@@ -104,4 +105,17 @@ it('delivers all 300 short messages without the receive item cap dropping histor
   Reflect.set(sender, 'send', (event: unknown) => Reflect.get(receiver, 'receive').call(receiver, event, 'sender'))
   Reflect.get(sender, 'sendHistory').call(sender, 'friend')
   expect(receiver.messages).toHaveLength(300)
+})
+
+it('requires selected participants to support the same game protocol',()=>{
+  const owner=identity.get().deviceId,group=new PeerGroup({...record,owner});groups.push(group)
+  group.peers.set('friend',{device:'friend123456',name:'Friend'})
+  expect(()=>group.startParty('chess',[owner,'friend123456'])).toThrow('update the app')
+  group.peers.set('friend',{device:'friend123456',name:'Friend',games:3})
+  group.startParty('chess',[owner,'friend123456'])
+  expect(group.party?.kind).toBe('chess')
+  expect(group.party?.data.collectionVersion).toBe(3)
+  group.peers.set('friend',{device:'friend123456',name:'Friend'})
+  expect(group.partyCompatible()).toBe(false)
+  expect(group.partyReady()).toBe(false)
 })

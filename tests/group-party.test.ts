@@ -15,8 +15,8 @@ const record = {id:'group123456', owner:'owner123456', title:'Friends', secret:'
 const live: PeerGroup[] = []
 function make() {
   const group = new PeerGroup(record)
-  group.peers.set('friend', {device:'friend123456',name:'Friend'})
-  group.peers.set('third', {device:'third123456',name:'Third'})
+  group.peers.set('friend', {device:'friend123456',name:'Friend',games:3})
+  group.peers.set('third', {device:'third123456',name:'Third',games:3})
   live.push(group)
   return group
 }
@@ -42,7 +42,7 @@ it('rejects stale, duplicate, wrong-turn, mismatched-game and disconnected moves
   receive(group,move,'third'); expect(group.party?.version).toBe(1)
   receive(group,{...move,gameId:'other-game'}); expect(group.party?.version).toBe(1)
   group.peers.delete('friend'); receive(group,move); expect(group.party?.version).toBe(1)
-  group.peers.set('friend',{device:'friend123456',name:'Friend'})
+  group.peers.set('friend',{device:'friend123456',name:'Friend',games:3})
   receive(group,move); expect(group.party?.version).toBe(2)
   receive(group,move); expect(group.party?.version).toBe(2)
   group.peers.delete('friend'); expect(() => group.partyMove({column:0})).toThrow('reconnect')
@@ -84,7 +84,29 @@ it('rejects bad group proof and frees the pending admission slot', async () => {
   vi.mocked(joinRoom).mockReturnValue(room as never)
   const group=new PeerGroup(record);live.push(group);await group.connect()
   const options=vi.mocked(joinRoom).mock.calls[0][2]!
-  const send=vi.fn(async()=>{}), receiveHello=vi.fn().mockResolvedValueOnce({data:{device:'friend123456',name:'Friend',nonce:'nonce123456'}}).mockResolvedValueOnce({data:{mac:'forged'}})
+  const send=vi.fn(async()=>{}), receiveHello=vi.fn().mockResolvedValueOnce({data:{device:'friend123456',name:'Friend',games:3,nonce:'nonce123456'}}).mockResolvedValueOnce({data:{mac:'forged'}})
   await expect(options.onPeerHandshake!('friend',send,receiveHello,true)).rejects.toThrow('proof')
   expect(group.peers.size).toBe(0);expect(Reflect.get(group,'pending')).toBe(0)
+})
+
+it('stamps basketball shots from the host clock and ends idle rounds at the buzzer',async()=>{
+ vi.useFakeTimers()
+ try {
+  const group=make();group.startParty('basketball',[record.owner,'friend123456']);group.partyMove({type:'start-round'})
+  await vi.advanceTimersByTimeAsync(1000)
+  group.partyMove({aim:0,elevation:47,power:.55,elapsed:59000})
+  expect(group.party?.data.roundElapsed).toBe(1000)
+  expect(()=>group.partyMove({type:'finish-round',elapsed:60000})).toThrow()
+  expect(()=>group.partyMove({aim:0,elevation:47,power:.55,elapsed:50000})).toThrow()
+  await vi.advanceTimersByTimeAsync(59000)
+  expect(group.party?.turn).toBe(1);expect(group.party?.data.roundStarted).toBe(false)
+  receive(group,{type:'party-move',gameId:group.party!.id,version:group.party!.version,move:{type:'start-round'}})
+  await vi.advanceTimersByTimeAsync(60000)
+  expect(group.party?.data.roundsDone).toEqual([true,true]);expect(group.party?.draw||group.party?.winner).toBeTruthy()
+  expect(Reflect.get(group,'basketballClock')).toBeNull()
+ } finally {vi.useRealTimers()}
+})
+it('does not extend a running basketball clock on disconnect and clears it on a new match',async()=>{
+ vi.useFakeTimers()
+ try {const group=make();group.startParty('basketball',[record.owner,'friend123456']);group.partyMove({type:'start-round'});group.peers.delete('friend');await vi.advanceTimersByTimeAsync(60000);expect(group.party?.turn).toBe(1);group.peers.set('friend',{device:'friend123456',name:'Friend',games:3});receive(group,{type:'party-move',gameId:group.party!.id,version:group.party!.version,move:{type:'start-round'}});expect(Reflect.get(group,'basketballClock')).not.toBeNull();group.startParty('chess',[record.owner,'friend123456']);expect(Reflect.get(group,'basketballClock')).toBeNull();await vi.advanceTimersByTimeAsync(60000);expect(group.party?.kind).toBe('chess')}finally{vi.useRealTimers()}
 })

@@ -49,7 +49,9 @@ export const Avatar = ({p, size = 40, conn}: {p: Profile; size?: number; conn?: 
     return () => {live = false; off(); if (owned) URL.revokeObjectURL(owned)}
   }, [id, p.avatarMedia?.mime, p.avatarMedia?.size])
   return <div className="avatar" style={{width: size, height: size, fontSize: size * .5}}>
-    {media?.id === id && !failed ? <video ref={videoRef} key={media.url} src={media.url} muted loop autoPlay={!reduceMotion && !systemMotion} playsInline preload="metadata" onError={() => setFailed(true)} onPlay={e => {if (reduceMotion || systemMotion) e.currentTarget.pause()}} style={{width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%'}} /> : p.avatar && !failed && /^data:image\/(?:webp|jpeg|png|gif|avif);base64,/.test(p.avatar) && p.avatar.length <= 250000 ? <img src={p.avatar} alt="" onError={() => setFailed(true)} /> : <span>{p.emoji}</span>}
+    <span className="avatar-media">
+      {media?.id === id && !failed ? <video ref={videoRef} key={media.url} src={media.url} muted loop autoPlay={!reduceMotion && !systemMotion} playsInline preload="metadata" onError={() => setFailed(true)} onPlay={e => {if (reduceMotion || systemMotion) e.currentTarget.pause()}} /> : p.avatar && !failed && /^data:image\/(?:webp|jpeg|png|gif|avif);base64,/.test(p.avatar) && p.avatar.length <= 250000 ? <img src={p.avatar} alt="" onError={() => setFailed(true)} /> : <span>{p.emoji}</span>}
+    </span>
     {conn && <i className={cx('dot', conn === 'online' && 'on', conn === 'searching' && 'searching')} />}
   </div>
 }

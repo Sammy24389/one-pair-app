@@ -1,0 +1,32 @@
+# Game collection
+
+Current revision: 13 selectable games with gesture-led controls. Sea Battle and Reversi are retired from new matches; Paintball replaces them. See [GESTURE-GAMES.md](GESTURE-GAMES.md) for the current interaction/timing contract. The earlier verification below predates this gesture revision and must not be used as visual evidence for the new controls.
+
+Scope: Four in a Row, Checkers, Mancala, Chess, Gomoku; Word Hunt, Anagrams, Word Bites; Darts, Archery, Basketball, Cup Pong, Paintball. Other game categories are not expanded. Original art and mechanics implementation, not copied GamePigeon assets. The previously verified media corrections remain in this branch.
+
+User outcome: choose a game, invite connected friends, understand the rules and turn immediately, play with touch or keyboard, see the same accepted move/shot on every device, finish a fair round and rematch. No application server, accounts, paid service or persistent cloud data added.
+
+Phases: (1) independent domain rules and original visual game surfaces, (2) catalogue/peer protocol integration and backwards compatibility, (3) negative/rule/physics tests and responsive browser playthroughs. Each phase is locally verified before release; deployment/APK publication is a separate release action.
+
+Interfaces: common GameKind/PartyGame/GameInfo/GameViewProps in game-types.ts; board/word/sports modules create data, validate state, mutate an isolated clone for an accepted move. The central router validates bounded participants, actor, version, terminal state, move shape and resulting state; only the authenticated room creator publishes state. No arbitrary landing coordinate is trusted for new sports games: bounded launch inputs run through fixed-step simulation, and the same path is replayed visually.
+
+Design: categorized illustrated catalogue, a focused game surface with concise turn/score feedback, useful legal destinations rather than arbitrary clicks, dimensional original board pieces and tactile letter tiles, SVG/canvas sports scenes with real trajectories. Controls must remain usable on small screens, support keyboard/reduced motion, and preserve original media/call flows. Games requiring two players say so; supported score games keep the existing four-player cap.
+
+Fairness: identical word puzzles and equal submission opportunities; equal sports attempts (equal 60-second turns for Basketball) and explicit ties. Shuffle starting seats on new matches; strategic board games intrinsically can have opening advantages, so do not promise mathematically equal winning chances. Chess must enforce king safety and special rules. Paintball choices stay device-private behind salted commitments until both participants lock; attacks resolve together to preserve equal chances. Friendly host trust and refusal-to-reveal remain explicit limits.
+
+Storage/security/operations: validate every peer state and move, retain existing authenticated transport and ingress limits; bound game state and move counts to the existing payload budget. Private Paintball choices stay device-local with bounded retention; dictionaries and rule libraries are licensed static assets, never network lookups during play. No API/RLS/schema/queue/index changes apply. Existing signaling/TURN dependencies, closed-app delivery limitations and four-device scaling cap remain.
+
+Acceptance/verification: every listed game starts and accepts legal input; rejects invalid/out-of-turn/stale/nonfinite moves; follows win/draw/special rules; exposes loading/error/empty/end states. Physics is deterministic with visible misses/collisions and no automatic first-player winner. Test full local suite/typecheck/build, clean locked install after dependency changes, real phone/desktop interactions and at least one meaningful playthrough per game family. Physical PC/phone peer synchronization, battery and codec performance remain device checks. Revert the collection modules/router/catalogue together to roll back; no data migration.
+
+## Earlier 14-game baseline verification - 23 October 2026
+
+- Clean locked install: `npm ci --ignore-scripts --no-audit --prefer-offline` passed.
+- Full suite: `npm test -- --maxWorkers=1` passed, 300 tests across 42 files.
+- `npm run build` passed, including `tsc --noEmit` and PWA generation. ESLint is not configured in this repository.
+- Browser review at 390 x 844 and 1280 x 900 exercised catalogue selection, chess/checkers legal destinations, Four in a Row drops, Mancala sowing, Reversi flips, Gomoku placement, accepted words in all three word games, all four sports shots/replays, and a two-perspective Sea Battle commit/fire/proof exchange. No browser console errors were captured in the review fixture. This fixture uses real components and rules but does not prove physical peer delivery.
+- Review corrections: unknown collection versions now reject rather than falling through to legacy rules; reconnecting older clients cannot resume an incompatible modern match. Version-2 capability is required for all selected players. Sea Battle proof histories have a bounded 110,000-character state budget and party-state transport has a 120,000-byte outbound ceiling. Other event limits remain unchanged.
+- Mobile layout corrections: a global empty-state class had enlarged blank letter tiles; it now has a scoped name. Board grids retain 40px targets with contained horizontal panning when necessary. Disabled game pieces retain readable contrast.
+
+Remaining limits: original 2D/projected sports scenes are not identical GamePigeon graphics or physics. Some chess glyphs vary by operating system. Board opening advantages remain intrinsic; seats shuffle and rematches can swap sides. Friendly room-host trust remains; a player who withholds a Sea Battle proof/reveal can stall that match. The offline dictionary is a separately cached 1.45 MB uncompressed asset (about 429 KB gzip). No server/API/database change is introduced; existing signaling and relay dependencies remain. Physical phone-to-PC synchronization, low-end Android frame rate, battery use and APK verification remain release checks. Scaling beyond the existing four-player room limit is out of scope.
+
+Release state: local changes only; not committed, deployed or packaged into a new APK. Preserve the earlier media corrections in this branch. Roll back collection changes as one coherent unit; retain legacy snapshot decoding during compatibility windows.

@@ -6,6 +6,19 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 
 ## [Unreleased]
 
+## [1.4.0-test.1] - 2026-10-23
+
+### Added
+- Android host for the separately installed OpenPigeon app, selected room participants, saved pending turns and reconnect recovery.
+- Side-by-side Padi OpenPigeon Test APK option that preserves the existing app and its local data.
+- Built-in board, word and gesture sports collection with Paintball and animated Mancala sowing.
+
+### Fixed
+- Constrain profile images and videos to their avatar bounds, show video status previews, and keep shared media focused on the player.
+
+### Testing
+- External OpenPigeon gameplay requires two-device acceptance; no game assets are bundled with Padi.
+
 ## [1.3.0] - 2026-10-22
 
 ### Added
