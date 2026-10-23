@@ -156,18 +156,12 @@ The **Release** workflow then:
 - publishes a GitHub Release whose notes are the matching CHANGELOG section, with `OnePair-vX.Y.Z.apk`, `OnePair-vX.Y.Z-web.zip` and `SHA256SUMS.txt` attached
 - deploys the PWA to GitHub Pages
 
-The **CI** workflow runs on every push and PR: it typechecks, builds the web app, builds a debug APK (uploaded as an artifact), and validates the changelog.
+The **CI** workflow runs on every push and PR: it typechecks, builds the web app, checks Android compilation without distributing its debug APK, and validates the changelog.
 
 ### One-time repository setup
 
 1. **Pages.** Go to Settings → Pages → Source and choose **GitHub Actions**.
-2. **APK signing.** Without this, every release is signed with a throwaway debug key, so updates won't install over each other. Create a keystore once and keep it safe:
-   ```bash
-   keytool -genkeypair -v -keystore onepair.jks -alias onepair -keyalg RSA -keysize 4096 -validity 10000
-   base64 -w0 onepair.jks   # macOS: base64 -i onepair.jks
-   ```
-   Then add these repository secrets (Settings → Secrets and variables → Actions):
-   `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+2. **APK signing.** Local releases and GitHub releases use one permanent key pinned by `android/release-signing.sha256`. Release builds fail if signing credentials are absent, invalid or belong to another certificate; there is no debug fallback. Follow [the signing runbook](docs/ANDROID-SIGNING.md) to initialize, configure GitHub secrets, build locally and make an encrypted backup. Never commit the keystore or passwords. Development debug builds are not updateable release downloads.
 3. Replace `OWNER/REPO` in the links at the bottom of `CHANGELOG.md`.
 
 ## Connectivity

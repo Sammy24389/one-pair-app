@@ -22,12 +22,13 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:signing
       - run: npx vite build
       - name: CHANGELOG has an entry for the current version or Unreleased
         run: node scripts/changelog.mjs --check
 
   android:
-    name: Android debug APK
+    name: Android compilation check
     runs-on: ubuntu-latest
     needs: web
     steps:
@@ -51,8 +52,4 @@ jobs:
       - name: Assemble debug APK
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
-      - uses: actions/upload-artifact@v4
-        with:
-          name: OnePair-debug-${{ github.sha }}
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 14
+      # Development debug APKs are not published. Shared APKs come from the signed Release workflow.

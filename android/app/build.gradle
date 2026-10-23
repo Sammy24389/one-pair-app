@@ -42,11 +42,41 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
-            // Use the release keystore when provided, otherwise fall back to the debug key so the APK is still installable.
-            signingConfig signingConfigs.release.storeFile ? signingConfigs.release : signingConfigs.debug
+            signingConfig signingConfigs.release
         }
     }
 }
+
+
+def validateReleaseSigning = tasks.register('validateReleaseSigning') {
+    doLast {
+        def names = ['ONEPAIR_KEYSTORE', 'ONEPAIR_KEYSTORE_PASSWORD', 'ONEPAIR_KEY_ALIAS', 'ONEPAIR_KEY_PASSWORD']
+        def missing = names.findAll { !System.getenv(it) }
+        if (missing) throw new GradleException("Release signing is required. Missing: ${missing.join(', ')}")
+        def keyFile = file(System.getenv('ONEPAIR_KEYSTORE'))
+        if (!keyFile.isFile()) throw new GradleException('Release signing keystore does not exist.')
+        def pinFile = rootProject.file('release-signing.sha256')
+        if (!pinFile.isFile()) throw new GradleException('Missing permanent release certificate fingerprint.')
+        def expected = pinFile.text.trim().toLowerCase()
+        if (!(expected ==~ /[a-f0-9]{64}/)) throw new GradleException('Invalid release certificate fingerprint.')
+        def certificate
+        try {
+            def keyStore = java.security.KeyStore.getInstance(keyFile, System.getenv('ONEPAIR_KEYSTORE_PASSWORD').toCharArray())
+            def alias = System.getenv('ONEPAIR_KEY_ALIAS')
+            if (!(keyStore.getKey(alias, System.getenv('ONEPAIR_KEY_PASSWORD').toCharArray()) instanceof java.security.PrivateKey)) {
+                throw new Exception('Missing private key')
+            }
+            certificate = keyStore.getCertificate(alias)
+            if (!certificate) throw new Exception('Missing certificate')
+        } catch (Exception ignored) {
+            throw new GradleException('Invalid release signing keystore, alias or password.')
+        }
+        def actual = java.security.MessageDigest.getInstance('SHA-256').digest(certificate.encoded).encodeHex().toString()
+        if (actual != expected) throw new GradleException('Release certificate does not match the pinned permanent key.')
+        logger.lifecycle('Permanent release certificate verified.')
+    }
+}
+tasks.configureEach { if (name == 'preReleaseBuild') dependsOn(validateReleaseSigning) }
 
 repositories {
     flatDir{

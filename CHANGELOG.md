@@ -6,6 +6,10 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 
 ## [Unreleased]
 
+### Fixed
+- Use a single permanent Android release certificate for local and GitHub builds, reject missing/wrong signing keys, and stop publishing temporary-key CI debug APKs.
+- Add protected local signing credentials, GitHub-secret setup, public certificate verification and encrypted backup tooling.
+
 ## [1.4.0-test.1] - 2026-10-23
 
 ### Added

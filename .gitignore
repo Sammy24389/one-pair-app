@@ -16,3 +16,9 @@ android/capacitor-cordova-android-plugins
 *.keystore
 *.jks
 release/
+
+# Private signing material (public certificate fingerprints are tracked)
+*.p12
+*.pfx
+*.clixml
+keystore.properties
