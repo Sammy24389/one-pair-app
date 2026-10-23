@@ -1,0 +1,17 @@
+[
+  {
+    "repository": "appsinacup/godot-box2d",
+    "commit": "bdbb72faad0f6ea6dd93cb4fb26745918eb39eb6",
+    "archiveSha256": "2433e8cbc668b30a525d9e1b9301286f387233d2c650423d209f5ac446524a8a"
+  },
+  {
+    "repository": "godotengine/godot-cpp",
+    "commit": "54136ee8357c5140a3775c54f08db5f7deda2058",
+    "archiveSha256": "1f6ed91cdf1a6c7afb88e77d80ff5a16e372efe53227b4403c7243d35cb4f36e"
+  },
+  {
+    "repository": "appsinacup/box2d",
+    "commit": "774779bb291755f6cb26df87a859e676c4c41ee5",
+    "archiveSha256": "d94655e182bd8582f54d477b612328c33eac7bb369b2f0d1a6e3e75c351fa229"
+  }
+]

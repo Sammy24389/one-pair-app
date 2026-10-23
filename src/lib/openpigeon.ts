@@ -21,7 +21,6 @@ type OpenPigeonPlugin={
  syncMessage(o:{roomId:string;participants:string[];message:OpenPigeonMessage}):Promise<void>
  acknowledge(o:{requestId:string;success:boolean;error?:string}):Promise<void>
  close():Promise<void>
- install():Promise<void>
  addListener(event:'message',listener:(value:NativeMessage)=>void):Promise<PluginListenerHandle>
  addListener(event:'state',listener:(value:NativeState)=>void):Promise<PluginListenerHandle>
 }
@@ -83,14 +82,14 @@ function drain():Promise<void>{
 export async function refreshOpenPigeon(){
  if(!bridge)return
  openPigeonState.set({loading:true,error:''})
- try{const value=await bounded(bridge.status());if(typeof value.installed!=='boolean')throw new Error('Update Padi to enable the OpenPigeon bridge.');openPigeonState.set({installed:value.installed,version:typeof value.version==='string'?value.version:''});attempts=0;await drain()}
+ try{const value=await bounded(bridge.status());if(typeof value.installed!=='boolean')throw new Error('Update OnePair to enable the included OpenPigeon games.');openPigeonState.set({installed:value.installed,version:typeof value.version==='string'?value.version:''});attempts=0;await drain()}
  catch(e){failure(e);throw e}finally{openPigeonState.set({loading:false})}
 }
 function ready(group:PeerGroup,participants:string[]){
  if(!bridge)throw new Error('OpenPigeon currently needs Padi on Android.')
  if(lockState.get().locked)throw new Error('Unlock Padi before opening a game.')
  if(openPigeonState.get().locked)throw new Error('Finish the active OpenPigeon game before opening another.')
- if(!openPigeonState.get().installed)throw new Error('Install OpenPigeon, then check installation.')
+ if(!openPigeonState.get().installed)throw new Error('The included OpenPigeon engine is unavailable. Update OnePair and try again.')
  if(!groupRegistry.get().records.some(r=>r.id===group.record.id)||!group.openPigeonReady(participants))throw new Error('Connect all selected players using the Padi Android app first.')
 }
 async function keepConnected(){if(nativeBridge&&!startedKeepAlive){await nativeBridge.startKeepAlive();startedKeepAlive=true}}
@@ -108,7 +107,6 @@ export async function openOpenPigeonGame(group:PeerGroup,session:OpenPigeonSessi
  await keepConnected();activeRoom=group.record.id
  try{await bounded(bridge!.openGame({roomId:group.record.id,participants:[...current.participants],message:current.message}))}catch(e){activeRoom=null;await releaseKeepAlive();failure(e);throw e}
 }
-export async function installOpenPigeon(){if(!bridge)throw new Error('Install OpenPigeon from your Android device.');await bounded(bridge.install())}
 export function initializeOpenPigeon():Promise<void>{
  if(!bridge)return Promise.resolve()
  if(initializing)return initializing

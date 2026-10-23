@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#80ADD8E6" />
+            <corners android:radius="4dp" />
+            <stroke android:width="2dp" android:color="#4682B4" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#ADD8E6" />
+            <corners android:radius="4dp" />
+            <stroke android:width="2dp" android:color="#4682B4" />
+        </shape>
+    </item>
+    <item>
+        <bitmap
+            android:src="@drawable/wordhunt_letter_bg"
+            android:tileMode="disabled"
+            android:gravity="fill" />
+    </item>
+</selector>

@@ -23,6 +23,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run test:signing
+      - run: node --test tests/android-source-package.test.mjs tests/bundled-android.test.mjs
       - run: npx vite build
       - name: CHANGELOG has an entry for the current version or Unreleased
         run: node scripts/changelog.mjs --check
@@ -31,6 +32,7 @@ jobs:
     name: Android compilation check
     runs-on: ubuntu-latest
     needs: web
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -47,9 +49,21 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           # The default ("tools platform-tools") fails: the legacy 'tools' package no longer exists in the SDK repo.
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.2.12479018 cmake;3.22.1'
+      - name: Set up pinned Godot editor
+        env:
+          GODOT_ARCHIVE_SHA256: d0bc2113065e481c9c2c2b2c37daa4e8be3fe9e27f0ab9ab0b6096e9a37907f3
+        run: |
+          curl --fail --location --retry 3 --max-time 300 https://github.com/godotengine/godot-builds/releases/download/4.6.3-stable/Godot_v4.6.3-stable_linux.x86_64.zip -o "$RUNNER_TEMP/godot.zip"
+          printf '%s  %s\n' "$GODOT_ARCHIVE_SHA256" "$RUNNER_TEMP/godot.zip" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/godot-4.6.3"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot-4.6.3"
+          chmod +x "$RUNNER_TEMP/godot-4.6.3/Godot_v4.6.3-stable_linux.x86_64"
+          "$RUNNER_TEMP/godot-4.6.3/Godot_v4.6.3-stable_linux.x86_64" --headless --version
+          echo "GODOT_BIN=$RUNNER_TEMP/godot-4.6.3/Godot_v4.6.3-stable_linux.x86_64" >> "$GITHUB_ENV"
+
       - run: npx cap sync android
-      - name: Assemble debug APK
+      - name: Test native code and assemble debug APK
         working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+        run: chmod +x gradlew && ./gradlew testDebugUnitTest assembleDebug --no-daemon
       # Development debug APKs are not published. Shared APKs come from the signed Release workflow.

@@ -1,0 +1,22 @@
+[
+  {
+    "file": "ofl_inter.txt",
+    "source": "https://raw.githubusercontent.com/OpenBubbles/OpenPigeon/wordhunt/app/src/main/res/raw/ofl_inter.txt",
+    "sha256": "40dfe0003dcd0bbde5a51ef5df205076e0e2921bd3ba190dae4ef783d74f919b"
+  },
+  {
+    "file": "ofl_lexend.txt",
+    "source": "https://raw.githubusercontent.com/OpenBubbles/OpenPigeon/wordhunt/app/src/main/res/raw/ofl_lexend.txt",
+    "sha256": "7184789ad81c84357af81f8a2e3e38eae2221433e44e078bb653dd211b355da6"
+  },
+  {
+    "file": "ofl_jellee.txt",
+    "source": "https://raw.githubusercontent.com/OpenBubbles/OpenPigeon/wordhunt/app/src/main/res/raw/ofl_jellee.txt",
+    "sha256": "fe0ebcd61e084acff74973ae18db773cbc18c499d057f84cf28edfbec114ed70"
+  },
+  {
+    "file": "ofl_fivosans.txt",
+    "source": "https://raw.githubusercontent.com/OpenBubbles/OpenPigeon/wordhunt/app/src/main/res/raw/ofl_fivosans.txt",
+    "sha256": "8b275c05cb26d96ebef3915adfcb2d234b6998e25ded1e3886087f31dd95ab11"
+  }
+]

@@ -8,6 +8,7 @@ def appVersionCode = versionParts[0] * 10000 + versionParts[1] * 100 + versionPa
 
 android {
     buildFeatures { aidl = true }
+    sourceSets.main.aidl.srcDirs = []
     namespace = "app.onepair.p2p"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
@@ -15,7 +16,8 @@ android {
         applicationId(partnerTest ? "app.onepair.p2p.openpigeontest" : "app.onepair.p2p")
         manifestPlaceholders = [appLabel: partnerTest ? "Padi OpenPigeon Test" : "@string/app_name",
                                 activityLabel: partnerTest ? "Padi OpenPigeon Test" : "@string/title_activity_main"]
-        minSdkVersion rootProject.ext.minSdkVersion
+        minSdkVersion 26
+        ndk { abiFilters 'arm64-v8a' }
         targetSdkVersion rootProject.ext.targetSdkVersion
         // Release CI may override these; local/debug builds use the same package version.
         versionCode((System.getenv("ONEPAIR_VERSION_CODE") ?: appVersionCode.toString()) as int)
@@ -24,7 +26,7 @@ android {
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
-            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
     signingConfigs {
@@ -90,6 +92,7 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation project(':openpigeon')
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

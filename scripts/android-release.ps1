@@ -50,7 +50,7 @@ function Verify-LocalKey {
     else { throw 'Pinned release certificate is missing.' }
     return $fingerprint
 }
-$environmentNames = @('ONEPAIR_KEYSTORE','ONEPAIR_KEY_ALIAS','ONEPAIR_KEYSTORE_PASSWORD','ONEPAIR_KEY_PASSWORD','JAVA_HOME','ANDROID_HOME','ONEPAIR_BACKUP_PASSWORD')
+$environmentNames = @('ONEPAIR_KEYSTORE','ONEPAIR_KEY_ALIAS','ONEPAIR_KEYSTORE_PASSWORD','ONEPAIR_KEY_PASSWORD','JAVA_HOME','ANDROID_HOME','GODOT_BIN','ONEPAIR_BACKUP_PASSWORD')
 $previous = @{}
 foreach ($name in $environmentNames) { $previous[$name] = [Environment]::GetEnvironmentVariable($name, 'Process') }
 try {
@@ -133,6 +133,19 @@ try {
         'Build' {
             $env:JAVA_HOME = $javaRoot
             if (-not $env:ANDROID_HOME) { $env:ANDROID_HOME = Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
+            $godot = if ($env:GODOT_BIN) { $env:GODOT_BIN } else { Join-Path $projectRoot 'release/tools/godot-4.6.3/Godot_v4.6.3-stable_win64_console.exe' }
+            if (-not (Test-Path -LiteralPath $godot -PathType Leaf)) {
+                throw 'Godot 4.6.3-stable editor is required. Extract the official Godot_v4.6.3-stable_win64.exe.zip into release/tools/godot-4.6.3, or set GODOT_BIN to its console executable. Expected archive SHA256: e39986a178d585ce7ac198fb8de6ea436366dc0cc00e594810c2e3e104c04b90. The build helper does not download tools.'
+            }
+            $env:GODOT_BIN = (Resolve-Path -LiteralPath $godot).Path
+            $godotVersion = (& $env:GODOT_BIN --headless --version | Out-String).Trim()
+            Check-Native 'Godot editor version'
+            if ($godotVersion -notmatch '^4\.6\.3\.stable(?:\.|$)') { throw "Godot 4.6.3-stable is required; found $godotVersion." }
+            foreach ($prerequisite in @('ndk/27.2.12479018/source.properties','cmake/3.22.1/bin/cmake.exe')) {
+                if (-not (Test-Path -LiteralPath (Join-Path $env:ANDROID_HOME $prerequisite))) {
+                    throw "Android SDK prerequisite missing: $prerequisite. Install NDK 27.2.12479018 and CMake 3.22.1 with Android Studio SDK Manager (Show Package Details), then retry."
+                }
+            }
             $init = Join-Path $keyHome 'build-output.gradle'
             [IO.File]::WriteAllText($init, "gradle.beforeProject { project ->`n    def key = project.path == ':' ? 'root' : project.path.substring(1).replace(':', '_')`n    project.layout.buildDirectory.set(new File(System.getProperty('user.home'), '.gradle/onepair-native-build/' + key))`n}`n")
             Push-Location $projectRoot
@@ -143,7 +156,7 @@ try {
                 Check-Native 'Android web assets'
                 Push-Location android
                 try {
-                    $gradleArgs = @(':app:validateReleaseSigning',':app:testReleaseUnitTest',':app:assembleRelease','--no-daemon','--max-workers=1','-Pkotlin.compiler.execution.strategy=in-process',"-Pkotlin.project.persistent.dir=$env:USERPROFILE/.gradle/onepair-kotlin",'--project-cache-dir',"$env:USERPROFILE/.gradle/onepair-native-project-cache",'-I',$init)
+                    $gradleArgs = @(':app:validateReleaseSigning','testReleaseUnitTest',':app:assembleRelease','--no-daemon','--max-workers=1','-Pkotlin.compiler.execution.strategy=in-process',"-Pkotlin.project.persistent.dir=$env:USERPROFILE/.gradle/onepair-kotlin",'--project-cache-dir',"$env:USERPROFILE/.gradle/onepair-native-project-cache",'-I',$init)
                     if ($TestBuild) { $gradleArgs += '-PonepairTestBuild=true' }
                     & ./gradlew.bat @gradleArgs
                     Check-Native 'Signed Android release'
@@ -165,9 +178,13 @@ try {
                 Check-Native 'Pinned APK signer'
                 & "$tools/aapt.exe" dump badging $apk | Set-Content -LiteralPath "$out/metadata.txt"
                 Check-Native 'APK metadata'
+                $source = Join-Path $out "Padi-$version-$short$suffix-source.zip"
+                & node scripts/package-android-source.mjs $source
+                Check-Native 'Corresponding Android source package'
+                $sourceHash = (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant()
                 $hash = (Get-FileHash -LiteralPath $apk -Algorithm SHA256).Hash.ToLowerInvariant()
-                "$hash  $([IO.Path]::GetFileName($apk))" | Set-Content -LiteralPath "$out/SHA256SUMS.txt"
-                @{commit=$commit;version=$version;certificateSHA256=$fingerprint;sha256=$hash;sideBySide=$TestBuild.IsPresent;bytes=(Get-Item -LiteralPath $apk).Length;lockfileSHA256=(Get-FileHash package-lock.json -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath "$out/provenance.json"
+                @("$hash  $([IO.Path]::GetFileName($apk))", "$sourceHash  $([IO.Path]::GetFileName($source))") | Set-Content -LiteralPath "$out/SHA256SUMS.txt"
+                @{commit=$commit;version=$version;certificateSHA256=$fingerprint;sha256=$hash;sourceSHA256=$sourceHash;sideBySide=$TestBuild.IsPresent;bytes=(Get-Item -LiteralPath $apk).Length;lockfileSHA256=(Get-FileHash package-lock.json -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content -LiteralPath "$out/provenance.json"
                 Write-Output "Verified release APK: $apk"
             } finally { Pop-Location }
         }

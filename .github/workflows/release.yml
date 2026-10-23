@@ -27,7 +27,7 @@ jobs:
   build:
     name: Build & publish
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v5
         with:
@@ -67,6 +67,12 @@ jobs:
       - name: Web regression tests
         run: npm test
 
+      - name: Signing, source packaging and bundled Android regression tests
+        run: node --test tests/android-signing.test.mjs tests/android-source-package.test.mjs tests/bundled-android.test.mjs
+
+      - name: Package corresponding Android source from clean checkout
+        run: node scripts/package-android-source.mjs "out/OnePair-$TAG-source.zip"
+
       - name: Extract release notes from CHANGELOG.md
         run: node scripts/changelog.mjs "$TAG" > release-notes.md
 
@@ -87,7 +93,19 @@ jobs:
       - uses: android-actions/setup-android@v3
         with:
           # The default ("tools platform-tools") fails: the legacy 'tools' package no longer exists in the SDK repo.
-          packages: 'platform-tools platforms;android-36 build-tools;36.0.0'
+          packages: 'platform-tools platforms;android-36 build-tools;36.0.0 ndk;27.2.12479018 cmake;3.22.1'
+
+      - name: Set up pinned Godot editor
+        env:
+          GODOT_ARCHIVE_SHA256: d0bc2113065e481c9c2c2b2c37daa4e8be3fe9e27f0ab9ab0b6096e9a37907f3
+        run: |
+          curl --fail --location --retry 3 --max-time 300 https://github.com/godotengine/godot-builds/releases/download/4.6.3-stable/Godot_v4.6.3-stable_linux.x86_64.zip -o "$RUNNER_TEMP/godot.zip"
+          printf '%s  %s\n' "$GODOT_ARCHIVE_SHA256" "$RUNNER_TEMP/godot.zip" | sha256sum --check --strict
+          mkdir -p "$RUNNER_TEMP/godot-4.6.3"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot-4.6.3"
+          chmod +x "$RUNNER_TEMP/godot-4.6.3/Godot_v4.6.3-stable_linux.x86_64"
+          "$RUNNER_TEMP/godot-4.6.3/Godot_v4.6.3-stable_linux.x86_64" --headless --version
+          echo "GODOT_BIN=$RUNNER_TEMP/godot-4.6.3/Godot_v4.6.3-stable_linux.x86_64" >> "$GITHUB_ENV"
 
       - name: Sync Capacitor
         run: npx cap sync android
@@ -107,7 +125,7 @@ jobs:
           export ONEPAIR_VERSION_NAME="$VERSION"
           export ONEPAIR_VERSION_CODE=$((MA * 10000 + MI * 100 + PA))
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew testReleaseUnitTest assembleRelease --no-daemon --stacktrace
 
       - name: Verify permanent APK certificate
         run: |
@@ -130,6 +148,7 @@ jobs:
             echo "**Downloads**"
             echo "- \`OnePair-$TAG.apk\` - Android (sideload; allow installs from your browser/files app)"
             echo "- \`OnePair-$TAG-web.zip\` - self-hostable PWA"
+            echo "- \`OnePair-$TAG-source.zip\` - corresponding Android source, build scripts, and OpenPigeon licenses"
             echo "- Web app: https://$OWNER.github.io/$REPO/"
           } >> release-notes.md
 
@@ -145,6 +164,8 @@ jobs:
             out/*.zip
             out/SHA256SUMS.txt
             out/signing-certificate.txt
+            out/*source.zip.sha256
+            out/*source.zip.provenance.json
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4

@@ -4,8 +4,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
-import android.net.Uri;
-import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -20,7 +18,7 @@ import java.util.concurrent.Executors;
 @CapacitorPlugin(name = "OpenPigeon")
 public class OpenPigeonPlugin extends Plugin {
     static OpenPigeonPlugin instance;
-    static final String PACKAGE = "com.openbubbles.openpigeon";
+    static final String SERVICE = "com.openbubbles.openpigeon.MadridExtensionService";
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService remote = Executors.newSingleThreadExecutor();
     private final Map<String, Pending> pending = new LinkedHashMap<>();
@@ -53,16 +51,15 @@ public class OpenPigeonPlugin extends Plugin {
     @PluginMethod public void status(PluginCall call) {
         JSObject result = new JSObject();
         try {
-            result.put("version", getContext().getPackageManager().getPackageInfo(PACKAGE, 0).versionName == null ? "" : getContext().getPackageManager().getPackageInfo(PACKAGE, 0).versionName);
+            getContext().getPackageManager().getServiceInfo(new ComponentName(getContext().getPackageName(), SERVICE), 0);
+            result.put("version", com.openbubbles.openpigeon.BuildConfig.VERSION_NAME);
             result.put("installed", true);
-        } catch (Exception absent) { result.put("installed", false); result.put("version", ""); }
+            result.put("bundled", true);
+        } catch (Exception absent) {
+            result.put("installed", false);
+            result.put("version", "");
+        }
         call.resolve(result);
-    }
-    @PluginMethod public void install(PluginCall call) {
-        main.post(() -> {
-            try { getActivity().startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + PACKAGE))); call.resolve(); }
-            catch (Exception e) { call.reject("Cannot open the OpenPigeon install page"); }
-        });
     }
     private Room readRoom(PluginCall call) throws Exception {
         String id = call.getString("roomId", "");
@@ -117,10 +114,9 @@ public class OpenPigeonPlugin extends Plugin {
             @Override public void onNullBinding(ComponentName name) { fail("OpenPigeon returned no game service"); releaseBinding(); }
         };
         try {
-            Intent intent = new Intent().setComponent(new ComponentName(PACKAGE, PACKAGE + ".MadridExtensionService"));
+            Intent intent = new Intent().setComponent(new ComponentName(getContext().getPackageName(), SERVICE));
             int flags = Context.BIND_AUTO_CREATE;
-            if (Build.VERSION.SDK_INT >= 34) flags |= Context.BIND_ALLOW_ACTIVITY_STARTS;
-            if (!getContext().bindService(intent, connection, flags)) { releaseBinding(); fail("Install or update OpenPigeon first"); }
+            if (!getContext().bindService(intent, connection, flags)) { releaseBinding(); fail("The included OpenPigeon engine could not start; restart OnePair"); }
         } catch (Exception e) { releaseBinding(); fail("Cannot connect to OpenPigeon"); }
     }
     private void disconnected() {
@@ -149,7 +145,7 @@ public class OpenPigeonPlugin extends Plugin {
         });
     }
     private void display(RemoteViews views) {
-        if (views == null || !PACKAGE.equals(views.getPackage())) { fail("Invalid OpenPigeon view"); return; }
+        if (views == null || !getContext().getPackageName().equals(views.getPackage())) { fail("Invalid OpenPigeon view"); return; }
         latestViews = views;
         if (surface == null) {
             getActivity().startActivity(new Intent(getContext(), OpenPigeonActivity.class).putExtra("token", token));
@@ -159,7 +155,7 @@ public class OpenPigeonPlugin extends Plugin {
         try {
             surface.render(latestViews);
             if (opening != null) { opening.resolve(); opening = null; }
-        } catch (Exception e) { fail("Cannot display the OpenPigeon picker; update OpenPigeon"); }
+        } catch (Exception e) { fail("Cannot display the included OpenPigeon picker; restart OnePair"); }
     }
     boolean attach(OpenPigeonActivity activity, String value) {
         if (!Objects.equals(token, value) || latestViews == null) return false;

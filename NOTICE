@@ -1,0 +1,22 @@
+OnePair with bundled OpenPigeon games
+
+Original OnePair project: https://github.com/ssuvamm/one-pair-app
+OnePair retains original authorship and attribution. This fork does not claim
+ownership of upstream OnePair or OpenPigeon works.
+
+OpenPigeon: archived v1-final-agpl release, commit
+50863e937beca3859c01ad04af29bcbf837f650e
+https://github.com/OpenBubbles/OpenPigeon
+
+The owner approved compatible AGPL licensing and corresponding-source delivery
+for the combined Android build and this fork's modifications, relying on the
+owner's reported original-author permission to modify/redistribute OnePair.
+The combined build and fork modifications are distributed under GNU AGPL
+version 3; see LICENSE and the preserved LICENSE.exceptions. Retain pinned
+upstream LICENSE, exceptions and third-party notices. This notice
+does not override those terms or relicense third-party works.
+
+Shared bundled APKs require matching corresponding source and build instructions.
+See docs/OPENPIGEON-REUSE.md. Private signing credentials are excluded.
+No upstream endorsement is claimed. Current differently licensed OpenPigeon
+assets are not authorized by this integration decision.

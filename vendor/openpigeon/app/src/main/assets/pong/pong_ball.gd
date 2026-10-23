@@ -1,0 +1,397 @@
+extends RigidBody3D
+class_name PongBall
+
+const LOG_TAG := "PongBall"
+const DEBUG_PONG_BALL := false
+
+func dbg(parts: Variant) -> void:
+	if DEBUG_PONG_BALL:
+		OpLog.d(LOG_TAG, parts)
+
+var game: PongGame
+var hit_cup: StaticBody3D = null
+var made_in: StaticBody3D = null
+var thrown: bool = false
+var is_mine: bool = false
+var replay_poses: Array[Vector3]
+
+var frame_num: int = 2
+var num_collisions: int = 0
+var soft_cup_frames: int = 0
+var soft_cup_name: String = ""
+var rescue_cup_frames: int = 0
+
+var _prev_global_pos: Vector3 = Vector3.ZERO
+var _has_prev_global_pos: bool = false
+
+const CUP_MOUTH_Y: float = -0.445
+const CUP_KILL_Y: float = -0.515
+const CUP_ENTER_RADIUS: float = 0.096
+const CUP_STAY_RADIUS: float = 0.124
+const CUP_RESET_RADIUS: float = 0.170
+const CUP_MIN_FRAMES: int = 10
+const CUP_MAX_XZ_SPEED: float = 1.65
+const CUP_RESCUE_RADIUS: float = 0.105
+const CUP_RESCUE_Y: float = -0.490
+const CUP_RESCUE_MAX_XZ_SPEED: float = 0.75
+const CUP_RESCUE_MAX_VERTICAL_SPEED: float = 1.10
+const CUP_RESCUE_FRAMES: int = 3
+
+
+func _ready() -> void:
+	self.game = get_parent()
+
+	if self.physics_material_override != null:
+		self.physics_material_override = self.physics_material_override.duplicate()
+	else:
+		self.physics_material_override = PhysicsMaterial.new()
+
+	self.physics_material_override.bounce = 0.22
+	self.physics_material_override.friction = 0.68
+
+	self.mass = 1.0
+	self.linear_damp = 0.03
+	self.angular_damp = 0.15
+	self.contact_monitor = true
+	self.max_contacts_reported = 8
+
+
+func _physics_process(_delta: float) -> void:
+	if not is_mine:
+		return
+
+	if thrown:
+		if frame_num >= 2:
+			replay_poses.append(self.position)
+			frame_num = 0
+		frame_num += 1
+
+		_update_cup_entry_check()
+
+	var collisions: Array[Node3D] = get_colliding_bodies()
+
+	if collisions.size() > 0 and not thrown:
+		_store_prev_position()
+		return
+
+	if collisions.size() > 0:
+		dbg([
+			"ball_contact pos=", global_position,
+			" vel=", linear_velocity,
+			" count=", collisions.size()
+		])
+
+		for c: Node3D in collisions:
+			dbg([
+				"collider name=", c.name,
+				" parent=", c.get_parent().name if c.get_parent() else "<no parent>",
+				" path=", str(c.get_path())
+			])
+
+	if made_in == null and hit_cup == null:
+		for collision: Node3D in collisions:
+			if "CupMesh" not in collision.name:
+				continue
+
+			var parent := collision.get_parent() as StaticBody3D
+			if parent == null:
+				continue
+
+			if _ball_really_entered_cup(parent):
+				_set_hit_cup(parent)
+				break
+			else:
+				dbg(["rim_or_outside_cup pos=", global_position, " vel=", linear_velocity])
+
+	_store_prev_position()
+
+func _update_cup_entry_check() -> void:
+	if made_in != null:
+		return
+
+	if not is_instance_valid(game) or not is_instance_valid(game.my_cups):
+		return
+
+	if hit_cup == null:
+		var entered_cup: StaticBody3D = _find_entered_cup()
+
+		if entered_cup != null:
+			_set_hit_cup(entered_cup)
+		else:
+			var rescue_cup: StaticBody3D = _find_settled_cup()
+
+			if rescue_cup != null:
+				rescue_cup_frames += 1
+
+				if rescue_cup_frames >= CUP_RESCUE_FRAMES:
+					OpLog.i(LOG_TAG, [
+						"cup_rescue_detected cup=", rescue_cup.name,
+						" frames=", rescue_cup_frames,
+						" pos=", global_position,
+						" vel=", linear_velocity
+					])
+
+					_set_hit_cup(rescue_cup)
+					soft_cup_frames = CUP_MIN_FRAMES
+			else:
+				rescue_cup_frames = 0
+				soft_cup_frames = 0
+				return
+
+	if not is_instance_valid(hit_cup):
+		hit_cup = null
+		soft_cup_frames = 0
+		rescue_cup_frames = 0
+		return
+
+	var cup_pos: Vector3 = hit_cup.global_position
+	var dist: float = Vector2(
+		global_position.x - cup_pos.x,
+		global_position.z - cup_pos.z
+	).length()
+
+	var below_mouth: bool = global_position.y < CUP_MOUTH_Y
+	var deep_in_cup: bool = global_position.y < CUP_KILL_Y
+	var still_inside: bool = dist <= CUP_STAY_RADIUS and below_mouth
+
+	var clearly_out: bool = (
+		dist > CUP_RESET_RADIUS
+		or global_position.y > CUP_MOUTH_Y + 0.045
+	)
+
+	if still_inside:
+		soft_cup_frames += 1
+
+		if self.physics_material_override != null:
+			self.physics_material_override.bounce = minf(
+				self.physics_material_override.bounce,
+				0.08
+			)
+
+		if (
+			soft_cup_frames >= CUP_MIN_FRAMES
+			or (deep_in_cup and dist <= CUP_ENTER_RADIUS)
+		):
+			await _commit_made_cup(hit_cup)
+			return
+	else:
+		soft_cup_frames = maxi(0, soft_cup_frames - 1)
+
+		if clearly_out:
+			OpLog.i(LOG_TAG, [
+				"cup_rejected cup=", soft_cup_name,
+				" frames=", soft_cup_frames,
+				" pos=", global_position,
+				" vel=", linear_velocity
+			])
+
+			hit_cup = null
+			soft_cup_frames = 0
+			rescue_cup_frames = 0
+
+func _find_entered_cup() -> StaticBody3D:
+	if not _has_prev_global_pos:
+		return null
+
+	var best_cup: StaticBody3D = null
+	var best_dist: float = INF
+
+	for cup in game.my_cups.get_children():
+		if cup == null or not (cup is StaticBody3D):
+			continue
+		if cup.name == &"cupremoved" or not cup.visible:
+			continue
+
+		if not _ball_really_entered_cup(cup as StaticBody3D):
+			continue
+
+		var cup_pos: Vector3 = (cup as StaticBody3D).global_position
+		var dist: float = Vector2(global_position.x - cup_pos.x, global_position.z - cup_pos.z).length()
+
+		if dist < best_dist:
+			best_dist = dist
+			best_cup = cup as StaticBody3D
+
+	return best_cup
+
+func _find_settled_cup() -> StaticBody3D:
+	if not is_instance_valid(game) or not is_instance_valid(game.my_cups):
+		return null
+
+	if global_position.y > CUP_RESCUE_Y:
+		return null
+
+	var xz_speed: float = Vector2(
+		linear_velocity.x,
+		linear_velocity.z
+	).length()
+
+	if xz_speed > CUP_RESCUE_MAX_XZ_SPEED:
+		return null
+
+	if absf(linear_velocity.y) > CUP_RESCUE_MAX_VERTICAL_SPEED:
+		return null
+
+	var best_cup: StaticBody3D = null
+	var best_dist: float = INF
+
+	for child: Node in game.my_cups.get_children():
+		if not (child is StaticBody3D):
+			continue
+
+		var cup := child as StaticBody3D
+
+		if not is_instance_valid(cup):
+			continue
+
+		if cup.name == &"cupremoved" or not cup.visible:
+			continue
+
+		var cup_pos: Vector3 = cup.global_position
+		var dist: float = Vector2(
+			global_position.x - cup_pos.x,
+			global_position.z - cup_pos.z
+		).length()
+
+		if dist <= CUP_RESCUE_RADIUS and dist < best_dist:
+			best_dist = dist
+			best_cup = cup
+
+	return best_cup
+
+func _commit_made_cup(cup: StaticBody3D) -> void:
+	if made_in != null or not is_instance_valid(cup):
+		return
+
+	var cup_name := String(cup.name)
+	var cup_num := int(cup_name.replace("cup", ""))
+
+	if cup_num <= 0:
+		OpLog.w(LOG_TAG, [
+			"cup_commit_invalid_name name=", cup_name,
+			" pos=", global_position
+		])
+		return
+
+	made_in = cup.duplicate()
+
+	OpLog.i(LOG_TAG, [
+		"cup_made cup=", cup_name,
+		" cupNum=", cup_num,
+		" frames=", soft_cup_frames,
+		" rescueFrames=", rescue_cup_frames,
+		" pos=", global_position,
+		" vel=", linear_velocity
+	])
+
+	await game.my_cups.remove_cup(cup_num)
+	remove()
+
+func _ball_really_entered_cup(cup: StaticBody3D) -> bool:
+	if not _has_prev_global_pos or not is_instance_valid(cup):
+		return false
+
+	if _prev_global_pos.y < CUP_MOUTH_Y or global_position.y > CUP_MOUTH_Y:
+		return false
+
+	var dy: float = _prev_global_pos.y - global_position.y
+	if dy <= 0.0001:
+		return false
+
+	var t: float = clampf((_prev_global_pos.y - CUP_MOUTH_Y) / dy, 0.0, 1.0)
+	var crossing_pos: Vector3 = _prev_global_pos.lerp(global_position, t)
+
+	var cup_pos: Vector3 = cup.global_position
+	var crossing_dist: float = Vector2(crossing_pos.x - cup_pos.x, crossing_pos.z - cup_pos.z).length()
+	var current_dist: float = Vector2(global_position.x - cup_pos.x, global_position.z - cup_pos.z).length()
+	var xz_speed: float = Vector2(linear_velocity.x, linear_velocity.z).length()
+
+	return crossing_dist <= CUP_ENTER_RADIUS \
+		and current_dist <= CUP_STAY_RADIUS \
+		and linear_velocity.y < 0.15 \
+		and xz_speed <= CUP_MAX_XZ_SPEED
+
+
+func _set_hit_cup(cup: StaticBody3D) -> void:
+	if hit_cup == cup:
+		return
+
+	hit_cup = cup
+	soft_cup_name = String(cup.name)
+	soft_cup_frames = 0
+	rescue_cup_frames = 0
+	num_collisions = 0
+
+	OpLog.i(LOG_TAG, [
+		"cup_entered cup=", cup.name,
+		" pos=", global_position,
+		" vel=", linear_velocity
+	])
+
+	if self.physics_material_override != null:
+		self.physics_material_override.bounce = minf(self.physics_material_override.bounce, 0.08)
+
+
+func _store_prev_position() -> void:
+	_prev_global_pos = global_position
+	_has_prev_global_pos = true
+
+func throw(x_force: float, y_force: float) -> void:
+	OpLog.i(LOG_TAG, [
+		"throw_old_api xForce=", x_force,
+		" yForce=", y_force,
+		" pos=", global_position
+	])
+
+	apply_impulse(Vector3(-x_force, -1.30, y_force))
+	thrown = true
+	_store_prev_position()
+
+	await get_tree().create_timer(3.0).timeout
+
+	if not is_inside_tree() or made_in != null:
+		return
+
+	var final_cup: StaticBody3D = null
+
+	if is_instance_valid(hit_cup):
+		var cup_pos: Vector3 = hit_cup.global_position
+		var dist: float = Vector2(
+			global_position.x - cup_pos.x,
+			global_position.z - cup_pos.z
+		).length()
+
+		if (
+			global_position.y <= CUP_RESCUE_Y
+			and dist <= CUP_STAY_RADIUS
+		):
+			final_cup = hit_cup
+
+	if final_cup == null:
+		final_cup = _find_settled_cup()
+
+	if final_cup != null:
+		OpLog.i(LOG_TAG, [
+			"cup_timeout_rescue cup=", final_cup.name,
+			" pos=", global_position,
+			" vel=", linear_velocity
+		])
+
+		await _commit_made_cup(final_cup)
+		return
+
+	remove()
+
+func remove():
+	if is_mine:
+		if made_in != null:
+			var cup_num: int = int(made_in.name.replace("cup", ""))
+			OpLog.i(LOG_TAG, ["ball_remove made cup=", cup_num, " replayPoints=", replay_poses.size()])
+			game.throws.append({"poses": replay_poses, "cup": cup_num - 1})
+		else:
+			OpLog.i(LOG_TAG, ["ball_remove miss replayPoints=", replay_poses.size()])
+			game.throws.append({"poses": replay_poses, "cup": -1})
+
+		game.throw_finished()
+
+	queue_free()

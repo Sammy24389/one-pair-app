@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!-- Just for PlayerIO and MixPanel, we shouldn't be hitting the internet under any other circumstances -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />  <!--Used for the games to add haptic feedback-->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <queries>
+        <package android:name="com.openbubbles.messaging" />
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OpenBubblesSampleExtension"
+        tools:targetApi="31">
+        <activity
+            android:name=".pool.PoolActivity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension" />
+        <activity
+            android:name=".knockout.KnockoutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension" />
+        <activity
+            android:name=".golf.GolfActivity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension" />
+        <activity
+            android:name=".shuffle.ShuffleActivity"
+            android:exported="false" />
+        <activity
+            android:name=".godot.GodotGameActivity"
+            android:exported="false"
+            android:process=":godot"
+            android:launchMode="singleTop"
+            android:resizeableActivity="true"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density" />
+        <activity
+            android:name=".wordhunt.WordHuntActivity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension" />
+        <activity
+            android:name=".crazy8.Crazy8Activity"
+            android:exported="false"
+            android:theme="@style/Theme.OpenBubblesSampleExtension"
+            android:windowSoftInputMode="adjustResize" />
+        <activity
+            android:name=".settings.AvatarSettingsActivity"
+            android:theme="@style/Theme.OpenPigeon.Transparent"
+            android:exported="false"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+        <activity
+            android:name=".GameNotFound"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+        <activity
+            android:name=".questions.SecretWordActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+        <activity
+            android:name=".AboutActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert"
+            android:taskAffinity="com.openbubbles.openpigeon.utility"
+            android:excludeFromRecents="true"
+            android:noHistory="true" />
+
+        <activity
+            android:name=".MainEntryActivity"
+            android:exported="true"
+            android:enabled="true"
+            android:theme="@style/Theme.Material3.DayNight.Dialog.Alert">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.INFO" />
+            </intent-filter>
+        </activity>
+
+        <service
+            android:name=".MadridExtensionService"
+            android:enabled="true"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name="com.openbubbles.messaging.MadridExtensionService" />
+            </intent-filter>
+            <meta-data
+                android:name="madrid_icon"
+                android:resource="@drawable/madrid_icon_small" />
+            <meta-data
+                android:name="color"
+                android:value="0xFFD4A72C" />
+            <meta-data
+                android:name="madrid_id"
+                android:value="1124197642" />
+            <meta-data
+                android:name="madrid_name"
+                android:value="GamePigeon" />
+            <meta-data
+                android:name="madrid_bundle_id"
+                android:value="com.apple.messages.MSMessageExtensionBalloonPlugin:EWFNLB79LQ:com.gamerdelights.gamepigeon.ext" />
+        </service>
+        <service
+            android:name=".godot.GameSessionService"
+            android:enabled="true"
+            android:exported="true"
+            tools:ignore="ExportedService">
+            <intent-filter>
+                <action android:name=".IGameSession" />
+            </intent-filter>
+        </service>
+    </application>
+
+</manifest>

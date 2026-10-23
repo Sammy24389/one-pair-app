@@ -1,0 +1,14 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application>
+<activity android:name="com.openbubbles.openpigeon.pool.PoolActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.knockout.KnockoutActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.golf.GolfActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.shuffle.ShuffleActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.wordhunt.WordHuntActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.settings.AvatarSettingsActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.GameNotFound" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.questions.SecretWordActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.AboutActivity" android:exported="false" android:theme="@style/Theme.OpenBubblesSampleExtension" />
+<activity android:name="com.openbubbles.openpigeon.godot.GodotGameActivity" android:exported="false" android:process=":godot" android:launchMode="singleTop" android:resizeableActivity="true" android:theme="@style/Theme.OpenBubblesSampleExtension" android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|density" />
+<service android:name="com.openbubbles.openpigeon.MadridExtensionService" android:exported="false" />
+<service android:name="com.openbubbles.openpigeon.godot.GameSessionService" android:exported="false" />
+</application></manifest>

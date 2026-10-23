@@ -1,0 +1,12 @@
+[
+  {
+    "file": "dseg7_classic_bold.ttf",
+    "source": "https://raw.githubusercontent.com/OpenBubbles/OpenPigeon/wordhunt/app/src/main/assets/basketball/dseg7_classic_bold.ttf",
+    "sha256": "db43a25246ff49fb9dcd5d63c129bead50b514eb4dc51a068308a3f41412544f"
+  },
+  {
+    "file": "OFL-DSEG.txt",
+    "source": "https://raw.githubusercontent.com/OpenBubbles/OpenPigeon/wordhunt/app/src/main/assets/basketball/OFL-DSEG.txt",
+    "sha256": "9afbc287e117808e3f32deba6823b7ef646fa58be867d9e2e068e62fdfcf106c"
+  }
+]

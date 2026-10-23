@@ -1,0 +1,10 @@
+{
+  "upstreamRepository": "https://github.com/OpenBubbles/box2d",
+  "upstreamCommit": "950b937f0161208ae9fcb2bbd3df0fcdc9d6d50f",
+  "archiveUrl": "https://codeload.github.com/OpenBubbles/box2d/zip/950b937f0161208ae9fcb2bbd3df0fcdc9d6d50f",
+  "archiveSha256": "6c44e784dddc436b184b33097fb90ad61e4180009eca426cbe2b563527cc1a6f",
+  "localChanges": "See tracked git diff and ONEPAIR-THIRD-PARTY-NOTICES.md in OpenPigeon; integration module is outside upstream source.",
+  "distributionExclusions": [
+    "Box2D/Build: unused upstream Windows/Xcode example projects and their example-only font; Android uses the vendored CMake and library sources instead."
+  ]
+}

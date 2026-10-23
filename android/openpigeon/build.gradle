@@ -1,0 +1,141 @@
+apply plugin: 'com.android.library'
+apply plugin: 'org.jetbrains.kotlin.android'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
+
+def upstream = rootProject.file('../vendor/openpigeon/app/src/main')
+def upstreamAssets = new File(upstream, 'assets')
+def godotVersion = '4.6.3'
+def gameAssets = layout.buildDirectory.dir("godot-project-${godotVersion}").get().asFile
+def godot = providers.environmentVariable('GODOT_BIN').orElse('godot')
+def stagedSources = layout.buildDirectory.dir('generated/openpigeonSources')
+def stageNativeSources = tasks.register('stageOpenPigeonSources', Sync) {
+    from(new File(upstream, 'java')) { exclude '**/crazy8/**' }
+    into stagedSources
+    doLast {
+        if (!fileTree(stagedSources).matching { include '**/crazy8/**' }.isEmpty()) {
+            throw new GradleException('Server-backed Crazy8 must not enter the bundled source set.')
+        }
+    }
+}
+
+android {
+    namespace 'com.openbubbles.openpigeon'
+    compileSdk 36
+    ndkVersion '27.2.12479018'
+    defaultConfig {
+        minSdk 26
+        buildConfigField 'String', 'VERSION_NAME', '"v1-final-agpl-onepair"'
+        buildConfigField 'int', 'VERSION_CODE', '1'
+        ndk { abiFilters 'arm64-v8a' }
+        externalNativeBuild { cmake {
+            cppFlags '-fno-fast-math'
+            arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
+        } }
+    }
+    buildFeatures { aidl true; viewBinding true; buildConfig true; compose true }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    kotlinOptions { jvmTarget = '17' }
+    sourceSets {
+        main {
+            manifest.srcFile 'src/main/AndroidManifest.xml'
+            java.srcDirs = [stagedSources]
+            java.exclude '**/crazy8/**'
+            aidl.srcDirs = [new File(upstream, 'aidl')]
+            res.srcDirs = [new File(upstream, 'res')]
+            jniLibs.srcDirs = [new File(upstream, 'jniLibs')]
+            assets.srcDirs = [layout.buildDirectory.dir('generated/gameAssets')]
+        }
+    }
+    externalNativeBuild { cmake {
+        path 'CMakeLists.txt'
+        version '3.22.1'
+        buildStagingDirectory rootProject.layout.buildDirectory.dir('openpigeon-cxx').get().asFile
+    } }
+    packaging { jniLibs { pickFirsts += ['**/libc++_shared.so'] } }
+}
+
+kotlin {
+    sourceSets.main.kotlin.setSrcDirs([stagedSources])
+    sourceSets.main.kotlin.exclude '**/crazy8/**'
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.13.1'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.navigation:navigation-fragment-ktx:2.6.0'
+    implementation 'androidx.navigation:navigation-ui-ktx:2.6.0'
+    implementation 'androidx.navigation:navigation-compose:2.9.0'
+    implementation 'androidx.activity:activity:1.11.0'
+    implementation 'androidx.activity:activity-ktx:1.11.0'
+    implementation 'androidx.activity:activity-compose:1.11.0'
+    implementation 'androidx.media3:media3-common-ktx:1.6.0'
+    implementation "org.godotengine:godot:${godotVersion}.stable"
+    implementation platform('androidx.compose:compose-bom:2025.05.00')
+    implementation 'androidx.compose.ui:ui:1.8.3'
+    implementation 'androidx.compose.ui:ui-graphics-android:1.8.3'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    implementation 'androidx.glance:glance-appwidget:1.1.1'
+    implementation 'androidx.glance:glance-preview:1.1.1'
+    implementation 'androidx.glance:glance-appwidget-preview:1.1.1'
+}
+
+def verifyGodot = tasks.register('verifyGodotVersion') {
+    doLast {
+        def versionOutput = new ByteArrayOutputStream()
+        project.exec { commandLine godot.get(), '--version'; standardOutput = versionOutput }
+        if (!versionOutput.toString('UTF-8').trim().startsWith(godotVersion + '.stable.')) {
+            throw new GradleException("Use the matching Godot ${godotVersion}-stable editor through GODOT_BIN.")
+        }
+    }
+}
+def stageGames = tasks.register('stageGodotGames', Copy) {
+    from(upstreamAssets) { exclude '.godot/**', '.vscode/**' }
+    into gameAssets
+}
+def importGames = tasks.register('importGodotGames', Exec) {
+    dependsOn verifyGodot, stageGames
+    inputs.files(fileTree(upstreamAssets) { exclude '.godot/**', '.vscode/**' })
+    outputs.dir(new File(gameAssets, '.godot'))
+    commandLine godot.get(), '--headless', '--path', gameAssets.absolutePath, '--editor', '--import'
+    timeout = java.time.Duration.ofMinutes(15)
+}
+def exportGames = tasks.register('exportGodotGames', Exec) {
+    dependsOn importGames
+    inputs.files(fileTree(upstreamAssets) { exclude '.godot/**', '.vscode/**' })
+    def pack = layout.buildDirectory.file("godot/games-${godotVersion}.zip")
+    outputs.file(pack)
+    doFirst { pack.get().asFile.parentFile.mkdirs() }
+    commandLine godot.get(), '--headless', '--path', gameAssets.absolutePath, '--export-pack', 'Android', pack.get().asFile.absolutePath
+    timeout = java.time.Duration.ofMinutes(15)
+}
+def prepareGames = tasks.register('prepareGodotGames', Sync) {
+    dependsOn exportGames
+    from({ zipTree(layout.buildDirectory.file("godot/games-${godotVersion}.zip").get().asFile) })
+    from(gameAssets) {
+        include 'attributions.html', 'global/gp_wg_*.txt', 'global/settings.png'
+        include 'knockout/**', 'golf/**', 'shuffle/**'
+        exclude '**/.gdignore'
+    }
+    from(new File(gameAssets, '.godot/imported')) {
+        include 'RedCupAlbedo.png-*.s3tc.ctex'
+        into '.godot/imported'
+    }
+    from(rootProject.file('../LICENSE')) { into 'licenses/openpigeon' }
+    from(rootProject.file('../LICENSE.exceptions')) { into 'licenses/openpigeon' }
+    from(rootProject.file('../NOTICE')) { into 'licenses/openpigeon' }
+    from(rootProject.file('../vendor/openpigeon/LICENSES')) { into 'licenses/openpigeon/third-party' }
+    from(rootProject.file('../vendor/openpigeon/ONEPAIR-THIRD-PARTY-NOTICES.md')) { into 'licenses/openpigeon' }
+    from(rootProject.file('../vendor/openpigeon/ONEPAIR-UPSTREAM.json')) { into 'licenses/openpigeon' }
+    from(rootProject.file('../vendor/box2d/Box2D/License.txt')) { into 'licenses/box2d' }
+    from(new File(gameAssets, 'addons/godot-box2d/LICENSE.txt')) { into 'licenses/godot-box2d' }
+    from(new File(gameAssets, 'addons/godot-box2d/THIRDPARTY.txt')) { into 'licenses/godot-box2d' }
+    into layout.buildDirectory.dir('generated/gameAssets')
+}
+tasks.configureEach {
+    if (name == 'preBuild') dependsOn stageNativeSources
+    if (name.matches('(?:merge|compress).*Assets') || name.contains('Lint')) dependsOn prepareGames
+}

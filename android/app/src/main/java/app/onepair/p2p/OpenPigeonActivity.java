@@ -9,7 +9,7 @@ import android.widget.RemoteViews;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-/** Private host surface. All game UI and pending intents belong to the separately installed app. */
+/** Private host surface. Game UI and pending intents belong to the bundled OpenPigeon library. */
 public class OpenPigeonActivity extends Activity {
     private LinearLayout surface;
     private String token;
@@ -22,7 +22,7 @@ public class OpenPigeonActivity extends Activity {
         int pad = (int) (16 * getResources().getDisplayMetrics().density);
         column.setPadding(pad, pad, pad, pad);
         Button back = new Button(this);
-        back.setText("Back to Padi");
+        back.setText("Back to OnePair");
         back.setOnClickListener(v -> finish());
         column.addView(back);
         TextView title = new TextView(this);

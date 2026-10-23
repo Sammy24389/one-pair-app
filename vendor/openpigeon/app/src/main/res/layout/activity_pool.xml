@@ -1,0 +1,241 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/poolRoot"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/background_soft_depth"
+    android:fitsSystemWindows="true"
+    tools:context=".pool.PoolActivity">
+
+    <SurfaceView
+        android:id="@+id/surfaceView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <LinearLayout
+        android:id="@+id/playerColumn"
+        android:layout_width="80dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="10dp"
+        android:layout_marginTop="18dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <TextView
+            android:id="@+id/youLabel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="You"
+            android:textColor="#CCFFFFFF"
+            android:textSize="18sp"
+            android:gravity="center"
+            android:layout_marginBottom="2dp" />
+
+        <FrameLayout
+            android:id="@+id/gameAvatarAnchor"
+            android:layout_width="80dp"
+            android:layout_height="58dp" />
+
+        <ImageView
+            android:id="@+id/playerBallType"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginTop="4dp"
+            android:src="@drawable/pool_ball_empty"
+            android:scaleType="fitCenter" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/oppColumn"
+        android:layout_width="80dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginEnd="10dp"
+        android:layout_marginTop="18dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#CCFFFFFF"
+            android:textSize="18sp"
+            android:gravity="center"
+            android:layout_marginBottom="2dp"
+            android:visibility="invisible" />
+
+        <FrameLayout
+            android:id="@+id/oppAvatarAnchor"
+            android:layout_width="80dp"
+            android:layout_height="58dp" />
+
+        <ImageView
+            android:id="@+id/oppBallType"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginTop="4dp"
+            android:src="@drawable/pool_ball_empty"
+            android:scaleType="fitCenter" />
+
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/leftRail"
+        android:layout_width="50dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="start|center_vertical"
+        android:paddingStart="5dp"
+        android:paddingEnd="5dp">
+
+        <FrameLayout
+            android:id="@+id/cueContainer"
+            android:layout_width="220dp"
+            android:layout_height="30dp"
+            android:layout_gravity="center"
+            android:background="@drawable/cue_drag_bg"
+            android:clipToOutline="true"
+            android:outlineProvider="background"
+            android:rotation="-90">
+
+            <ImageView
+                android:id="@+id/cueTip"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:layout_gravity="right|center_vertical"
+                android:background="#ff333333"
+                android:paddingRight="2dp"
+                android:src="@drawable/cue" />
+        </FrameLayout>
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/rightRail"
+        android:layout_width="50dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end|center_vertical"
+        android:paddingStart="5dp"
+        android:paddingEnd="5dp">
+
+        <LinearLayout
+            android:id="@+id/rightRailStack"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:gravity="center_horizontal">
+
+            <LinearLayout
+                android:id="@+id/nineBallBar"
+                android:layout_width="32dp"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:orientation="vertical"
+                android:gravity="center"
+                android:visibility="gone" />
+
+            <FrameLayout
+                android:id="@+id/cueView"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="@drawable/cue_item_3d"
+                android:clickable="true"
+                android:focusable="true">
+
+                <ImageView
+                    android:id="@+id/cueDot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    app:srcCompat="@drawable/cue_point" />
+            </FrameLayout>
+        </LinearLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/controls"
+        android:layout_width="1dp"
+        android:layout_height="1dp"
+        android:layout_gravity="bottom|center_horizontal"
+        android:orientation="horizontal"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/state_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="#77000000"
+        android:padding="10dp"
+        android:text="Waiting for opponent..."
+        android:textColor="@color/white" />
+
+    <ImageButton
+        android:id="@+id/skip_replay"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:layout_marginTop="8dp"
+        android:background="@android:color/transparent"
+        android:scaleType="fitCenter"
+        android:contentDescription="Skip Replay" />
+
+    <FrameLayout
+        android:id="@+id/cueOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <FrameLayout
+            android:id="@+id/cuePopup"
+            android:layout_width="140dp"
+            android:layout_height="140dp"
+            android:layout_gravity="center"
+            android:background="@drawable/cue_item_popup_3d"
+            android:clickable="true"
+            android:focusable="true"
+            android:visibility="invisible">
+
+            <ImageView
+                android:id="@+id/cuePopupDot"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="center"
+                app:srcCompat="@drawable/cue_point" />
+        </FrameLayout>
+    </FrameLayout>
+
+    <ImageButton
+        android:id="@+id/rulesButton"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginStart="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@android:color/transparent"
+        android:alpha="0.7"
+        android:contentDescription="Rules"
+        android:scaleType="fitCenter"
+        android:padding="6dp" />
+
+    <ImageButton
+        android:id="@+id/settingsButton"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="10dp"
+        android:layout_marginBottom="10dp"
+        android:background="@android:color/transparent"
+        android:alpha="0.7"
+        android:contentDescription="Settings"
+        android:scaleType="fitCenter"
+        android:padding="6dp" />
+
+</FrameLayout>

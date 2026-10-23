@@ -1,0 +1,152 @@
+package com.openbubbles.openpigeon.godot
+
+import android.content.Intent
+import android.os.Bundle
+import com.openbubbles.openpigeon.util.OpenPigeonLog
+import androidx.activity.enableEdgeToEdge
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import com.openbubbles.openpigeon.Game
+import com.openbubbles.openpigeon.MadridExtension
+import com.openbubbles.openpigeon.R
+import org.godotengine.godot.Godot
+import org.godotengine.godot.GodotActivity
+import org.godotengine.godot.plugin.GodotPlugin
+
+class GodotGameActivity : GodotActivity() {
+    lateinit var baseGame: Game
+
+    lateinit var sessionId: String
+    var appPlugin: GodotAppPlugin? = null
+    var mediaPlugin: OpenPigeonMediaPlugin? = null
+    var gameSessionIPC: GameSessionIPC? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        OpenPigeonLog.installContext(applicationContext)
+        enableEdgeToEdge()
+        setContentView(R.layout.activity_godot)
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.surfaceView)) { v, insets ->
+            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            insets
+        }
+        initGameSession(intent)
+    }
+
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        baseGame = MadridExtension.findByName(newIntent.getStringExtra("GAME")!!)!!
+        getOrCreateAppPlugin().switchGame(baseGame.getName())
+        initGameSession(newIntent)
+    }
+
+//    override fun getCommandLine(): MutableList<String> {
+//        return mutableListOf<String>("--remote-debug", "tcp://192.168.0.81:6008")
+//    }
+
+    override fun onResume() {
+        if (gameSessionIPC != null) {
+            gameSessionIPC?.setSuppressNotifications(sessionId, true)
+        } else if (::baseGame.isInitialized) {
+            OpenPigeonLog.w("openpigeon-${baseGame.getName()}", "onResume called before gameSessionIPC was initialized!")
+        } else {
+            OpenPigeonLog.w("openpigeon-godot", "onResume called before baseGame was initialized!")
+        }
+        super.onResume()
+        mediaPlugin?.resumeMusic()
+    }
+
+    override fun onPause() {
+        mediaPlugin?.pauseMusic()
+        gameSessionIPC?.setSuppressNotifications(sessionId, false)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        mediaPlugin?.stopMusic()
+        gameSessionIPC?.setSuppressNotifications(sessionId, false)
+        gameSessionIPC?.unlockMsgHandle(sessionId)
+        super.onDestroy()
+    }
+
+    private fun initGameSession(intent: Intent) {
+        OpenPigeonLog.installContext(applicationContext)
+
+        val sid = intent.getStringExtra("SESSION")
+        val gname = intent.getStringExtra("GAME")
+
+        if (sid.isNullOrEmpty() || gname.isNullOrEmpty()) {
+            OpenPigeonLog.e("openpigeon-godot", "Missing SESSION or GAME in intent; finishing.")
+            activity?.finish()
+            return
+        }
+
+        sessionId = sid
+        baseGame = MadridExtension.findByName(gname)!!
+        OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "GodotGameActivity opened with session: $sessionId")
+        GameSessionIPC(applicationContext) { gameSessionIPC ->
+            this.gameSessionIPC = gameSessionIPC
+            val currentMessage = gameSessionIPC.getCurrentMessage(sessionId)
+            if (currentMessage.isNotEmpty()) {
+                gameSessionIPC.lockMsgHandle(sessionId)
+                gameSessionIPC.setSuppressNotifications(sessionId, true)
+                OpenPigeonLog.i("openpigeon-${baseGame.getName()}", "player: ${(currentMessage["player"]?.toIntOrNull() ?: -1)}, replay: ${currentMessage["replay"]}")
+                sendGameData(isYourTurn(currentMessage), currentMessage.toMutableMap())
+
+                gameSessionIPC.onMessageUpdated(sessionId) { new: Map<String, String> ->
+                    val yourTurn = isYourTurn(new)
+                    if(yourTurn) {
+                        OpenPigeonLog.i(
+                            "openpigeon-${baseGame.getName()}",
+                            "onMessageUpdated -> isYourTurn: ${yourTurn}, message: $new"
+                        )
+                        sendGameData(yourTurn, new.toMutableMap())
+                    }
+                }
+            } else {
+                OpenPigeonLog.e("openpigeon-${baseGame.getName()}", "$sessionId does not exist!")
+                activity?.finish()
+            }
+        }
+    }
+
+    private fun getOrCreateAppPlugin(): GodotAppPlugin {
+        if (appPlugin == null) {
+            appPlugin = GodotAppPlugin(godot!!, this)
+        }
+        return appPlugin!!
+    }
+
+    private fun getOrCreateMediaPlugin(): OpenPigeonMediaPlugin {
+        if (mediaPlugin == null) {
+            mediaPlugin = OpenPigeonMediaPlugin(godot!!)
+        }
+        return mediaPlugin!!
+    }
+
+    private fun isYourTurn(message: Map<String, String>): Boolean {
+        val sender = message["sender"]
+        val myId = gameSessionIPC?.getSenderUUID(sessionId)
+        return sender != null && myId != null && sender != myId
+    }
+
+    private fun sendGameData(isYourTurn: Boolean, message: MutableMap<String, String>) {
+        if (message["replay"].isNullOrEmpty()) {
+            message["replay"] = baseGame.getDefaultReplay()
+        }
+        getOrCreateAppPlugin().setGameData(isYourTurn, gameSessionIPC!!.getSenderUUID(sessionId), message)
+    }
+
+    override fun getHostPlugins(godot: Godot): Set<GodotPlugin> {
+        return setOf(getOrCreateAppPlugin(), getOrCreateMediaPlugin())
+    }
+
+    override fun onGodotForceQuit(instance: Godot) {
+        runOnUiThread {
+            activity?.finish()
+        }
+        super.onGodotForceQuit(instance)
+    }
+
+}

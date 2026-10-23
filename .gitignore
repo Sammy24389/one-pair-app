@@ -22,3 +22,18 @@ release/
 *.pfx
 *.clixml
 keystore.properties
+
+# Bundled native game outputs and imported Godot cache
+android/openpigeon/build/
+android/openpigeon/.cxx/
+vendor/openpigeon/app/src/main/assets/.godot/
+vendor/openpigeon/.idea/
+vendor/openpigeon/.kotlin/
+vendor/openpigeon/app/libs/PlayerIO.aar
+vendor/openpigeon/app/src/main/assets/.vscode/
+
+# Upstream desktop-only example projects are not part of the Android source build.
+/vendor/box2d/Box2D/Build/
+
+# Upstream addon CI is not part of the corresponding Android build.
+/vendor/godot-box2d/.github/

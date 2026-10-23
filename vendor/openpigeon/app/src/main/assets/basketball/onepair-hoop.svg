@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<!-- Original OnePair integration artwork. GNU AGPL-3.0; see repository LICENSE. -->
+<defs><linearGradient id="rim" x2="0" y2="1"><stop stop-color="#ff9a4a"/><stop offset="1" stop-color="#ce3b16"/></linearGradient></defs>
+<g fill="none" stroke="#e8ecf1" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+<path d="M88 306 275 838M194 342 350 850M300 363 430 857M406 375 510 860M512 380 592 857M618 375 674 850M724 363 750 838M830 342 800 820M936 306 820 800"/>
+<path d="M936 306 750 838M830 342 674 850M724 363 592 857M618 375 510 860M512 380 430 857M406 375 350 850M300 363 275 838M194 342 224 820M88 306 204 800"/>
+<path d="M132 430Q512 580 892 430M174 560Q512 688 850 560M216 690Q512 796 808 690M258 820Q512 900 766 820"/>
+</g>
+<ellipse cx="512" cy="294" rx="434" ry="94" fill="none" stroke="#8a2512" stroke-width="35"/>
+<ellipse cx="512" cy="284" rx="434" ry="94" fill="none" stroke="url(#rim)" stroke-width="25"/>
+<path d="M116 248Q512 126 908 248" fill="none" stroke="#ffc08a" stroke-width="5" opacity=".65"/>
+</svg>

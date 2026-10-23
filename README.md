@@ -7,8 +7,8 @@ A private little world for two: best friends or couples. **No backend, no accoun
 </p>
 
 <p align="center">
-  <a href="https://github.com/ssuvamm/one-pair-app/releases/latest"><b>⬇️ Download the Android APK</b></a> ·
-  <a href="https://ssuvamm.github.io/one-pair-app/"><b>🌐 Open the web app</b></a>
+  <a href="https://github.com/Sammy24389/one-pair-app/releases/latest"><b>⬇️ Download the Android APK</b></a> ·
+  <a href="https://padi-blond.vercel.app/"><b>🌐 Open the web app</b></a>
 </p>
 
 - **Pair with a code or QR code**: no sign-up, no email, no phone number
@@ -131,7 +131,11 @@ rollback, and the planned move to reliable offline delivery and groups.
 
 ### Android
 
-Requires JDK 21 and the Android SDK.
+The Android candidate includes OpenPigeon's archived AGPL game engine in the same APK. No second application is required. It targets Android 8+ on 64-bit ARM phones; browser/PC users retain the built-in collection.
+
+Requires JDK 21, Android SDK 36, NDK 27.2.12479018, CMake 3.22.1 and the matching Godot 4.6.3-stable editor. Set `GODOT_BIN` to that editor executable. See [bundled build and device test instructions](docs/OPENPIGEON-ANDROID.md).
+
+Combined Android distributions use GNU AGPL-3.0 with the preserved OpenPigeon interoperability exception. Deliver the matching corresponding-source ZIP and notices beside the APK. Original authors and third-party licenses are retained in [NOTICE](NOTICE) and [source/licensing notes](docs/OPENPIGEON-REUSE.md).
 
 ```bash
 npm run cap:sync       # web build for Capacitor + copy into android/
@@ -153,7 +157,7 @@ Releases are fully automated by GitHub Actions. You only commit, tag and push.
 
 The **Release** workflow then:
 - checks that the tag matches `package.json`, typechecks, and builds the PWA and the Android release APK (versionCode = `major*10000 + minor*100 + patch`)
-- publishes a GitHub Release whose notes are the matching CHANGELOG section, with `OnePair-vX.Y.Z.apk`, `OnePair-vX.Y.Z-web.zip` and `SHA256SUMS.txt` attached
+- publishes a GitHub Release whose notes are the matching CHANGELOG section, with `OnePair-vX.Y.Z.apk`, `OnePair-vX.Y.Z-source.zip`, source provenance, `OnePair-vX.Y.Z-web.zip` and checksums attached
 - deploys the PWA to GitHub Pages
 
 The **CI** workflow runs on every push and PR: it typechecks, builds the web app, checks Android compilation without distributing its debug APK, and validates the changelog.

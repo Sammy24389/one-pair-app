@@ -6,6 +6,15 @@ Each `## [x.y.z]` section becomes the GitHub Release notes for tag `vx.y.z`.
 
 ## [Unreleased]
 
+### Added
+- Bundle the archived AGPL OpenPigeon game engine inside OnePair Android, with private in-app game services, original creator credit and corresponding-source packaging.
+- Retain original Box2D physics with matched Godot 4.6.3 editor/runtime and a compatible spectator-label layout.
+
+### Changed
+- The bundled Android candidate requires Android 8+ and arm64 hardware. Browser games remain available separately.
+- Remove the second-app installation flow. Exclude server-backed Crazy 8, Sea Battle and Reversi from the OpenPigeon picker.
+- Preserve third-party notices and replace the noncommercial scoreboard font and unverified stock hoop texture with redistributable resources.
+
 ### Fixed
 - Use a single permanent Android release certificate for local and GitHub builds, reject missing/wrong signing keys, and stop publishing temporary-key CI debug APKs.
 - Add protected local signing credentials, GitHub-secret setup, public certificate verification and encrypted backup tooling.

@@ -1,0 +1,40 @@
+{
+  "upstreamRepository": "https://github.com/OpenBubbles/OpenPigeon",
+  "upstreamCommit": "50863e937beca3859c01ad04af29bcbf837f650e",
+  "archiveUrl": "https://codeload.github.com/OpenBubbles/OpenPigeon/zip/50863e937beca3859c01ad04af29bcbf837f650e",
+  "archiveSha256": "3b75bdaeeb700a880599190a2e0cab2289c74691e9e5a4d0eb9ff365e08d22be",
+  "localChanges": "See tracked git diff and ONEPAIR-THIRD-PARTY-NOTICES.md in OpenPigeon; integration module is outside upstream source.",
+  "excludedRestrictedFiles": [
+    "app/src/main/assets/basketball/segment-eglas.ttf",
+    "app/src/main/assets/basketball/segment-eglas.ttf.import",
+    "app/src/main/assets/basketball/AdobeStock_530856469.png",
+    "app/src/main/assets/basketball/AdobeStock_530856469.png.import"
+  ],
+  "replacementFiles": [
+    "app/src/main/assets/basketball/dseg7_classic_bold.ttf",
+    "app/src/main/assets/basketball/dseg7_classic_bold.ttf.import",
+    "app/src/main/assets/basketball/OFL-DSEG.txt",
+    "app/src/main/assets/basketball/onepair-hoop.svg",
+    "app/src/main/assets/basketball/onepair-hoop.svg.import"
+  ],
+  "compatibilityAdjustments": [
+    {
+      "file": "app/src/main/assets/dots/dots.tscn",
+      "reason": "Preserve spectator label 100px downward translation on Godot 4.6 using a MarginContainer with cancelling top/bottom margins instead of Godot 4.7 offset_transform properties. Unique SpecLabel lookup and original minimum layout size retained."
+    },
+    {
+      "file": "app/src/main/assets/project.godot",
+      "reason": "Pin matched Godot4.6.3 editor and Android runtime to preserve compatibility with the original Box2D0.9.9 extension;4.7 changed the required one-way collision virtual method signature."
+    },
+    {
+      "file": "app/src/main/assets/archery/bow/bowready.fbx",
+      "reason": "Moved unused FBX model and its import descriptor to unused-assets/archery/bow outside runtime assets. Its original importer referenced four absent textures. Godot4.6.3 ResourceLoader dependency audit of all scene/resource files found no model references; runtime archery.scn uses bow_diffuse.jpg, which remains unchanged in runtime assets. Text code searches found no dynamic bow-model loads. Original model source preserved."
+    }
+  ],
+  "androidPhysicsRebuild": {
+    "source": "vendor/godot-box2d/ONEPAIR-SOURCES.json",
+    "script": "scripts/build-godot-box2d.py",
+    "reason": "Original Box2D 0.9.9 source rebuilt with NDK27 and 16KB maximum/common ELF page size; original physics and Godot4.2 bindings retained. Android-only host GNU tools avoid Windows MSVC discovery.",
+    "sha256": "7be9ef723c8f9913168077d49a86ea0f2c3b9b6ba9df4909b388a7425679a19c"
+  }
+}

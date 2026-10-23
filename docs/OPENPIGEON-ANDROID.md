@@ -1,53 +1,71 @@
-# OpenPigeon Android host
+# Bundled OpenPigeon Android integration
 
 ## Outcome and scope
-Android Padi room creators choose two to four connected Android participants and open the original, separately installed OpenPigeon picker. A selected game determines its supported player count. Browser users retain built-in games and read-only match summaries. OpenPigeon controls its original catalogue, which can include games removed from Padi's built-in list.
 
-No OpenPigeon game code or assets are redistributed. No iMessage/OpenBubbles backend is introduced. Existing peer signaling and connectivity dependencies still apply; this is not guaranteed offline delivery to a disconnected device.
+OnePair Android bundles the archived OpenPigeon `v1-final-agpl` source at commit `50863e937beca3859c01ad04af29bcbf837f650e`. Participants install one OnePair APK; its room game entry opens the bundled picker/game activity. No separately installed OpenPigeon app is required. The selected game determines its player count; room selection remains limited to two to four participants. Browser/PC users retain built-in games and read-only match summaries.
 
-## Contracts and storage
-The Capacitor OpenPigeon plugin binds explicitly to com.openbubbles.openpigeon.MadridExtensionService. Madrid AIDL declarations and Apache attribution are in android/. External data is validated on the native, adapter and peer boundaries. Opaque data:? URLs and session identifiers are preserved. Image previews are omitted from transport. URLs are bounded to 90 KB, selected participants to 2-4, active native pending updates to 8, and saved room sessions to 24 for seven days.
+This is an Android source integration, not an iframe or a copied current-release asset pack. Bundled source lives in `vendor/openpigeon/` and `vendor/box2d/`; the native Android module is `android/openpigeon/`. Keep pinned source and notices intact. See [licensing/source delivery](OPENPIGEON-REUSE.md).
 
-The adapter persists at most eight unsent updates in IndexedDB under openpigeon.outbox.v1 for seven days. This is local device storage, cleared with app data; no cloud backup is added. Retries are bounded and resume on room events/foreground. The room owner validates roster and revision, persists accepted state and sends it only to selected participants. Guests wait for owner acceptance before acknowledging native completion. Native callbacks capture the original room to prevent cross-room routing. Friendly peers still trust OpenPigeon game logic; Padi does not decode its private turn format or prevent cheating inside it.
+## Transport and storage contract
+
+The existing Capacitor OpenPigeon adapter exchanges opaque game turns with the bundled native module through the Madrid host contract. Host and game components ship inside the same installed package. Preserve independent game sessions and explicit room/participant selection; never route a native callback to whichever room happens to be active later.
+
+The transport continues validating opaque `data:?` URLs and session IDs at native, adapter and peer boundaries. Image previews are omitted from peer transport. Existing limits are 90 KB per URL, two to four selected participants, eight unsent updates, and 24 saved room sessions for seven days. Local outbox storage is IndexedDB `openpigeon.outbox.v1`, expiring after seven days. Clearing application data deletes it; no cloud backup is added.
+
+The room owner validates roster/revision, persists accepted state and fans it out only to selected players. Guests acknowledge native completion after owner acceptance. Retries are bounded and resume on room events/foreground. OnePair does not decode private game rules or claim cheat prevention. Devices must be online together; existing signaling and STUN/optional TURN dependencies remain. No iMessage/OpenBubbles backend is added.
 
 ## User flow and failures
-Install OpenPigeon independently on every participating Android device. In Padi, join the same room, check installation, select connected players and choose a game. Guests open the resulting match card. Failed delivery stays pending locally with a reconnect message. A bridge capability badge means the Padi Android version supports the bridge, not proof that the remote OpenPigeon app is installed. Native bind and call waits have bounded timeouts; disconnected devices cannot immediately receive turns.
 
-## Acceptance and remaining verification
-Automated checks cover protocol/roster validation, owner acceptance, reconnect replay, spectator isolation and UI installation/launch states. Native unit tests cover payload limits. Required device acceptance: install both apps on two Android devices; start Basketball; complete alternating turns; verify unchanged session state, background/foreground recovery, reconnect delivery, app/service restart, removed-room isolation, and readable portrait/landscape picker. Repeat a supported multiplayer game with additional participants. Actual external-app gameplay and hardware performance remain unverified until these device checks pass.
+Install the same bundled APK on both Android phones, pair or join the same room, and open Games. The room owner chooses connected participants and opens OpenPigeon. The partner opens the resulting match card. Keep OpenPigeon attribution visible in entry and source/About information. Missing game/module initialization must produce a recoverable error rather than an install-another-app instruction.
 
-No database, API, cloud storage or new paid compute is introduced. Existing room event rate limits remain in effect. Scaling is intentionally bounded to the existing small rooms; connectivity through different mobile networks remains a deployment risk. Rollback removes the native card/bridge registration and retains built-in games; do not clear IndexedDB merely to roll back. No new release has been published by this implementation step.
+Native bind/call waits remain bounded. Delivery failures stay pending locally with reconnect feedback. A capability badge indicates bridge support, not proof that the other device has the same game source/version. Reject incompatible clients clearly. Background/restart behavior must be tested on actual devices.
 
-## Windows build verification
-Use the installed Android Studio JBR and Android SDK. On this workstation Java could not write compiler/cache files inside the project reliably. The ignored release/gradle-download/host-build-output.gradle init script redirects build output to the user Gradle directory. The successful compilation path uses a user-home project cache and in-process Kotlin compilation rather than the failing daemon/fallback subprocess. From android/:
+## Build and source delivery
+
+The bundled APK now requires **Android 8.0 or newer (API 26)** and a **64-bit ARM device (`arm64-v8a`)**. This raises the previous app's minimum Android version and excludes 32-bit ARM/x86 devices from this bundled build. Check both partner phones before installation. Browser/PC access is a separate web build and does not include the native OpenPigeon engine.
+
+Use Node 22 with the locked npm dependencies, JDK 21, Android SDK platform 36/build-tools 36.0.0, NDK **27.2.12479018**, CMake **3.22.1**, and the pinned Gradle wrapper. Install the exact NDK/CMake versions through Android Studio SDK Manager with Show Package Details enabled. Godot is pinned to 4.6.3 in both the editor and Android runtime because the bundled Box2D extension requires the compatible 4.6 GDExtension API. Do not upgrade the editor independently of the runtime or extension. The build uses the official **Godot 4.6.3-stable editor** to import and export the bundled Godot project; setting `GODOT_BIN` is required for direct Gradle commands.
+
+On Windows, download [Godot_v4.6.3-stable_win64.exe.zip](https://github.com/godotengine/godot-builds/releases/download/4.6.3-stable/Godot_v4.6.3-stable_win64.exe.zip), verify its SHA256 is `e39986a178d585ce7ac198fb8de6ea436366dc0cc00e594810c2e3e104c04b90`, and extract both executables into `release/tools/godot-4.6.3/`. Keep the console executable beside its editor executable. The signing helper reuses this location or an explicit `GODOT_BIN`; it does not redownload tools on each build. CI installs the same release's Linux x86_64 editor with a pinned SHA256 and the same Android toolchain versions.
+
+Run from the repository root in PowerShell 7.2 or newer:
 
 ```powershell
-./gradlew.bat :app:testDebugUnitTest --no-daemon --max-workers=1 '-Pkotlin.compiler.execution.strategy=in-process' '-Pkotlin.project.persistent.dir=C:/Users/XERXES/.gradle/onepair-kotlin' --project-cache-dir C:/Users/XERXES/.gradle/onepair-native-project-cache -I ../release/gradle-download/host-build-output.gradle
+$env:JAVA_HOME = 'C:/Program Files/Android/Android Studio/jbr'
+$env:ANDROID_HOME = Join-Path $env:LOCALAPPDATA 'Android/Sdk'
+$env:GODOT_BIN = (Resolve-Path 'release/tools/godot-4.6.3/Godot_v4.6.3-stable_win64_console.exe').Path
+& $env:GODOT_BIN --headless --version
+npm ci
+npm run typecheck
+npm test -- --maxWorkers=2 --testTimeout=20000
+node --test tests/android-signing.test.mjs tests/android-source-package.test.mjs tests/bundled-android.test.mjs
+npm run cap:sync
+cd android
+./gradlew.bat testDebugUnitTest :app:assembleDebug --no-daemon --max-workers=1
 ```
 
-The ignored init script can be recreated with this content:
+Use the permanent signing procedure in [ANDROID-SIGNING.md](ANDROID-SIGNING.md) for shared release APKs. Do not distribute temporary debug builds as the permanent update channel. The older debug-signed main app cannot be updated by the permanent key without a deliberate one-time data/installation transition. Never uninstall or clear user data automatically.
 
-```groovy
-gradle.beforeProject { project ->
-    def key = project.path == ':' ? 'root' : project.path.substring(1).replace(':', '_')
-    project.layout.buildDirectory.set(new File(System.getProperty('user.home'), '.gradle/onepair-native-build/' + key))
-}
-```
+After the source is committed, run `node scripts/package-android-source.mjs` for the default `release/source-COMMIT/` output, or pass an unused ZIP path inside the repository, such as `node scripts/package-android-source.mjs release/partner-source.zip`. Custom outputs include adjacent `.sha256` and `.provenance.json` sidecars. The source packager refuses dirty source, tracked private signing files and existing artifacts. The release helper automatically packages source beside the signed APK after a successful build; commit source before invoking it.
 
-This workaround is local build configuration, not a runtime app requirement. Standard CI can use its normal writable workspace. No ESLint configuration exists in this project; TypeScript, Vitest, Vite and Gradle are the configured checks.
+Share matching source, provenance and required notices alongside every bundled APK. A clean build from the extracted archive and actual recipient access remain release gates. CI must not publish an APK without that corresponding-source delivery. These build instructions do not establish that native compilation or device gameplay has passed; record the actual results separately.
 
-## Verification checkpoint: 2026-10-23
-- TypeScript and production Vite/PWA build passed.
-- All 350 Vitest tests across 48 files passed with --maxWorkers=2 --testTimeout=20000. The default 5-second emoji test timeout was too short under this workstation load; the same test passed without assertion changes.
-- Android :app:testDebugUnitTest passed with the command above: four OpenPigeon payload tests and the existing example test, zero failures. This compiled the new AIDL and Java host.
-- Local development server returned HTTP 200. Browser automation was unavailable, so no new visual or external-app gameplay verification is claimed.
-- No ESLint configuration exists. No new commit, deployment or APK release was published. Physical two-device Android acceptance remains pending.
+## Acceptance and verification boundary
 
-Review trade-off: the separate-app host retains upstream graphics and mechanics without maintaining a port, but installation of both apps and actual external-app lifecycle testing are required. The built-in collection remains available for rollback and browser use.
+Earlier separate-app host checks do not verify this bundled build. Required automated checks: TypeScript, Vitest, signing tests, production web build, Android compilation/native tests and release signature validation. No ESLint configuration exists in this project. Check logs for native library loading, resources, service/Activity lifecycle and payload errors.
 
-## Shared Android test build
-Version 1.4.0-test.1 uses versionCode 10400. Keep this build on both phones while testing; its room protocol differs from old game builds. Install OpenPigeon independently on both phones, pair in Padi, open More > Groups, join the same room, and let the room creator select players and choose an OpenPigeon game. The installed game controls how many players it supports. Start with Basketball and one opponent, then test background/foreground and reconnecting.
+Required physical acceptance: two Android phones with no standalone OpenPigeon dependency; picker and selected game render; complete alternating turns; preserve game session after chat/app switching, reconnect, process restart and room removal; verify touch controls, portrait/landscape, Back behavior, audio interruption and background recovery. Test a supported larger-player game separately. Verify same permanently signed APK updates an existing permanent-key installation without losing data.
 
-Build with -PonepairTestBuild=true to install as app.onepair.p2p.openpigeontest, labelled Padi OpenPigeon Test. This avoids the confirmed certificate mismatch with the previous CI APK and preserves the existing app and its data. Both partners pair afresh inside the separate test app. Without this flag the standard application ID and labels are retained. Keep the local debug keystore for future updates to this test installation; do not commit it.
+Device testing, hardware performance, full catalogue acceptance, clean-source rebuild and bundled APK publication are pending until evidence is recorded. Do not present compile-only evidence as successful two-device gameplay.
 
-Android 14+ requires BIND_ALLOW_ACTIVITY_STARTS for a visible client to let its bound external service open a game activity. The bridge opts in only for the explicit OpenPigeon service; the OS still applies visibility rules. This prevents a user tapping Open / Resume from being silently blocked by the platform. Source: https://developer.android.com/about/versions/14/behavior-changes-14#background-activity-starts
+## Production layers and rollback
+
+No new API, database, cloud object storage, paid compute or server-side account is introduced. Existing bounded room event limits remain. Device CPU/GPU, APK size, native ABI coverage and battery costs increase with the bundled engine and need measurement on target phones. Different mobile networks and foreground/background restrictions remain connectivity risks. Small-room capacity is intentionally bounded; wider scaling is outside this phase.
+
+Retain dependency/license notices and inspect nested third-party materials before redistribution. Crash logs must omit chat content, turn URLs and private identifiers. Rollback disables the bundled game entry and restores built-in games while preserving persisted sessions/outbox; do not erase local storage. Code rollback does not permit downgrading installed APK version codes or crossing signing keys.
+
+## Local verification checkpoint
+
+Bundled debug assembly and five Android unit tests passed. TypeScript, production web build, 351 Vitest assertions (333 full-run plus 18 rerun after worker startup timeouts), and source/signing boundary checks passed. Godot4.6.3 import/export completed without errors. No ESLint configuration exists. Physical two-phone gameplay and clean-source rebuild remain pending.
+
+The original Box2D0.9.9 Android addon was rebuilt with NDK27 for 16KB ELF alignment without changing physics code. Exact addon, godot-cpp and Box2D source pins and archive hashes are in `vendor/godot-box2d/ONEPAIR-SOURCES.json`. Install SCons4.9.1 into a local directory, then run `python scripts/build-godot-box2d.py --ndk PATH_TO_NDK27 --scons-path PATH_TO_LOCAL_SCONS`. The helper stages source under ignored release output and produces, but does not install, the Android library. Copy its output to both OpenPigeon Android jniLibs and the matching addon assets/bin path. Both tracked copies must have the same hash. Original library backups remain outside distributed source.
