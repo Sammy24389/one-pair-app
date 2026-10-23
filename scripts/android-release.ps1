@@ -13,7 +13,15 @@ $keyHome = Join-Path $env:USERPROFILE '.android/onepair-release'
 $keyPath = Join-Path $keyHome 'padi-release.p12'
 $credentialPath = Join-Path $keyHome 'credentials.clixml'
 $pinPath = Join-Path $projectRoot 'android/release-signing.sha256'
-$javaRoot = if ($env:JAVA_HOME) { $env:JAVA_HOME } else { 'C:\Program Files\Android\Android Studio\jbr' }
+$javaCandidates = @($env:JAVA_HOME, 'C:\Program Files\Android\Android Studio\jbr') | Where-Object { $_ }
+$javaRoot = $javaCandidates | Where-Object {
+    $metadata = Join-Path $_ 'release'
+    if (Test-Path -LiteralPath $metadata) {
+        $version = [regex]::Match([IO.File]::ReadAllText($metadata), 'JAVA_VERSION="(\d+)')
+        $version.Success -and [int]$version.Groups[1].Value -ge 21
+    }
+} | Select-Object -First 1
+if (-not $javaRoot) { throw 'Android releases require JDK 21 or newer. Set JAVA_HOME to a supported JDK.' }
 $keytool = Join-Path $javaRoot 'bin/keytool.exe'
 if (-not (Test-Path -LiteralPath $keytool)) { throw 'Set JAVA_HOME to an installed JDK before signing.' }
 function Check-Native([string]$Step) { if ($LASTEXITCODE -ne 0) { throw "$Step failed. No release should be shared." } }

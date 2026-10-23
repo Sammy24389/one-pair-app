@@ -4,7 +4,7 @@
 All distributed Padi releases use the same private key, on this PC and in GitHub Actions. The public SHA-256 fingerprint is pinned in android/release-signing.sha256. Gradle checks the key, alias, passwords and certificate before release builds; the APK is checked again with apksigner. Missing or different credentials stop the build. Development debug builds remain available for engineers, but CI does not distribute them as updateable APKs. No runtime app, database, network or cloud compute changes are needed.
 
 ## Local setup and builds (PowerShell 7, Windows)
-The helper uses Android Studio's JBR unless JAVA_HOME is set, and the SDK under LOCALAPPDATA unless ANDROID_HOME is set.
+The helper uses JAVA_HOME when it is JDK 21 or newer, otherwise a compatible Android Studio JBR. It rejects older JDKs before building. The SDK comes from LOCALAPPDATA unless ANDROID_HOME is set.
 
 ```powershell
 ./scripts/android-release.ps1 -Action Initialize
