@@ -3,7 +3,7 @@
 ## Contract
 All distributed Padi releases use the same private key, on this PC and in GitHub Actions. The public SHA-256 fingerprint is pinned in android/release-signing.sha256. Gradle checks the key, alias, passwords and certificate before release builds; the APK is checked again with apksigner. Missing or different credentials stop the build. Development debug builds remain available for engineers, but CI does not distribute them as updateable APKs. No runtime app, database, network or cloud compute changes are needed.
 
-## Local setup and builds (PowerShell 7, Windows)
+## Local setup and builds (PowerShell 7.2+, Windows)
 The helper uses JAVA_HOME when it is JDK 21 or newer, otherwise a compatible Android Studio JBR. It rejects older JDKs before building. The SDK comes from LOCALAPPDATA unless ANDROID_HOME is set.
 
 ```powershell
@@ -40,3 +40,10 @@ Keep existing APKs and keys. Roll back application behavior by building earlier 
 Verify: no-credential release fails, a valid but different key fails, the configured key passes, release unit tests pass, APK signatures match the pin, normal application ID remains app.onepair.p2p, and no private material is tracked. A real GitHub run and physical update test must be reported separately from local checks. Portable backup creation needs the owner's backup drive/password and remains a manual step until completed.
 
 Official background: https://developer.android.com/studio/publish/app-signing
+
+## Verification checkpoint: 2026-10-23
+The permanent key and all four repository secrets are configured. Repeated Initialize preserved the exact key file. Local ACL inspection found only the current Windows user and SYSTEM. A portable encrypted test backup was imported and its original certificate recovered; the temporary test copy was removed. The owner's offline backup is still a manual action.
+
+All 350 app tests and four signer tests passed. Actual Gradle releases rejected missing credentials and a valid but different debug key. The configured key passed validation, five native release tests passed, and assembleRelease including vital lint checks succeeded. apksigner matched the pinned fingerprint. The normal package ID, non-debuggable metadata, ZIP integrity and all 70 bundled web files were verified. Web assets contained neither the signing password nor encoded keystore. The helper's caller environment was tested for both absent variables and pre-existing values; PowerShell removes absent variables explicitly rather than leaving empty entries.
+
+The first permanent APK was built from e3a9cc6; the subsequent helper-only cleanup does not change APK code. GitHub secret names/presence are confirmed, but no new GitHub workflow run, push, deployment, publication or device installation was performed during setup. Real CI and device update acceptance remain separate checks.

@@ -1,4 +1,4 @@
-#Requires -Version 7.0
+#Requires -Version 7.2
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][ValidateSet('Initialize','Status','SyncGitHub','Build','ExportBackup')][string]$Action,
@@ -173,5 +173,8 @@ try {
         }
     }
 } finally {
-    foreach ($name in $environmentNames) { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') }
+    foreach ($name in $environmentNames) {
+        if ($null -eq $previous[$name]) { Remove-Item -LiteralPath ('Env:' + $name) -ErrorAction SilentlyContinue }
+        else { [Environment]::SetEnvironmentVariable($name, $previous[$name], 'Process') }
+    }
 }
