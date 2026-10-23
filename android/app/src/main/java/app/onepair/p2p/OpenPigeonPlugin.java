@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -117,7 +118,9 @@ public class OpenPigeonPlugin extends Plugin {
         };
         try {
             Intent intent = new Intent().setComponent(new ComponentName(PACKAGE, PACKAGE + ".MadridExtensionService"));
-            if (!getContext().bindService(intent, connection, Context.BIND_AUTO_CREATE)) { releaseBinding(); fail("Install or update OpenPigeon first"); }
+            int flags = Context.BIND_AUTO_CREATE;
+            if (Build.VERSION.SDK_INT >= 34) flags |= Context.BIND_ALLOW_ACTIVITY_STARTS;
+            if (!getContext().bindService(intent, connection, flags)) { releaseBinding(); fail("Install or update OpenPigeon first"); }
         } catch (Exception e) { releaseBinding(); fail("Cannot connect to OpenPigeon"); }
     }
     private void disconnected() {
