@@ -137,5 +137,5 @@ def prepareGames = tasks.register('prepareGodotGames', Sync) {
 }
 tasks.configureEach {
     if (name == 'preBuild') dependsOn stageNativeSources
-    if (name.matches('(?:merge|compress).*Assets') || name.contains('Lint')) dependsOn prepareGames
+    if (name.matches('(?:merge|compress).*Assets') || name.toLowerCase(java.util.Locale.ROOT).contains('lint')) dependsOn prepareGames
 }
