@@ -32,6 +32,9 @@ android {
             arguments '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON'
         } }
     }
+    androidResources {
+        ignoreAssetsPattern = '!.svn:!.git:!.gitignore:!.ds_store:!*.scc:<dir>_*:!CVS:!thumbs.db:!picasa.ini:!*~:!~*'
+    }
     buildFeatures { aidl true; viewBinding true; buildConfig true; compose true }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = '17' }

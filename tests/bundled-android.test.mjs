@@ -57,7 +57,9 @@ test('dead Godot callbacks release locks without clearing a newer registration',
 })
 
 test("Android packaging retains Godot imported textures and scripts", () => {
-  const app = read("android/app/build.gradle")
+  for (const module of ["android/app/build.gradle", "android/openpigeon/build.gradle"]) {
+  const app = read(module)
   const pattern = /ignoreAssetsPattern\s*=\s*'([^']+)'/.exec(app)[1]
   assert.ok(!pattern.split(":").includes(".*"), "Godot .godot resources must remain in APK")
+  }
 })
