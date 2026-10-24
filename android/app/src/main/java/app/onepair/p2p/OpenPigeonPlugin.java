@@ -189,6 +189,7 @@ public class OpenPigeonPlugin extends Plugin {
         optional(value, "ldText", m.ldText); optional(value, "caption", m.caption); optional(value, "subcaption", m.subcaption);
         optional(value, "secondaryCaption", m.secondaryCaption); optional(value, "tertiaryCaption", m.tertiaryCaption);
         optional(value, "imageTitle", m.imageTitle); optional(value, "imageSubtitle", m.imageSubtitle); value.put("isLive", m.isLive);
+        value.put("completed", OpenPigeonGameMetadata.completed(m.url));
         readMessage(value); return value;
     }
     private IMessageViewHandle handle(final Room context, final String session) {
@@ -200,10 +201,17 @@ public class OpenPigeonPlugin extends Plugin {
         };
     }
     private void emit(Room context, MadridMessage message, ITaskCompleteCallback callback, String expectedSession) {
+        remote.execute(() -> {
+            try {
+                JSObject payload = wire(message);
+                main.post(() -> queuePreparedMessage(context, message, callback, expectedSession, payload));
+            } catch (Exception e) { main.post(() -> state(e.getMessage())); }
+        });
+    }
+    private void queuePreparedMessage(Room context, MadridMessage message, ITaskCompleteCallback callback, String expectedSession, JSObject payload) {
         try {
             if (expectedSession != null && !expectedSession.equals(message.session)) throw new Exception("OpenPigeon changed the game session");
             if (pending.size() >= 8) throw new Exception("Too many unsent game updates; reconnect your room");
-            JSObject payload = wire(message);
             Room owner = sessions.get(message.session);
             if (owner != null && !sameRoom(owner, context)) throw new Exception("Game session belongs to another room");
             sessions.put(message.session, context);
@@ -242,9 +250,8 @@ public class OpenPigeonPlugin extends Plugin {
                     final IMadridExtension service = extension;
                     remote.execute(() -> {
                         try {
-                            service.getLiveView(new IViewUpdateCallback.Stub() { @Override public void updateView(RemoteViews ignored) {} }, message, handle(context, session), context.participants.length());
-                            service.messageUpdated(message);
                             if (open) service.didTapTemplate(message, handle(context, session), context.participants.length());
+                            else service.getLiveView(new IViewUpdateCallback.Stub() { @Override public void updateView(RemoteViews ignored) {} }, message, handle(context, session), context.participants.length());
                             main.post(call::resolve);
                         } catch (Exception e) { main.post(() -> call.reject("OpenPigeon could not open or update this game")); }
                     });

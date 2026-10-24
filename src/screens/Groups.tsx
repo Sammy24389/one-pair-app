@@ -77,7 +77,8 @@ export default function Groups() {
     if (section === 'chat' && selected) setReadMessages(previous => previous[selected] === latestMessage ? previous : {...previous, [selected]: latestMessage})
   }, [section, selected, latestMessage])
   const run = (fn: () => void | Promise<unknown>) => {setError(''); try {void Promise.resolve(fn()).catch(e => setError(e instanceof Error ? e.message : 'Try again.'))} catch(e) {setError(e instanceof Error ? e.message : 'Try again.')}}
-  return <div className="screen rooms-screen"><TopBar title="Rooms" />
+  const backToRooms = () => {setSelected(null); setSharing(false); setError('')}
+  return <div className="screen rooms-screen"><TopBar title="Rooms" onBack={group ? backToRooms : undefined} backLabel={group ? 'Back to rooms' : 'Back'} />
     {error && <p role="alert">{error}</p>}
     {!group ? <>
       {!identity.get().pairs.length && <button className="btn ghost" onClick={() => push('pair')}>Pair a device for private chat</button>}
@@ -109,7 +110,7 @@ export default function Groups() {
       {records.map(r => <button className="list-row card" key={r.id} onClick={() => setSelected(r.id)}>{r.title}</button>)}
       <details className="card"><summary>Connection & notifications</summary><div className="col" style={{gap: 8, marginTop: 8}}><button className="btn ghost" onClick={() => push('connection')}>Connection settings</button><button className="btn ghost" onClick={() => void ensureNotifyPermission()}>Enable message notifications</button></div></details>
     </> : <>
-      <button className="btn ghost" onClick={() => {setSelected(null); setSharing(false)}}>All groups</button>
+      <button className="btn ghost" onClick={backToRooms}>All groups</button>
       <h2 className="room-title" style={{overflowWrap: 'anywhere'}}>{group.record.title}</h2><p className="small muted">{group.peers.size + 1}/4 devices · {group.connected ? 'Connected' : 'Waiting for friends'}</p>
       {group.error && <p role="alert">{group.error}</p>}
       <div className="room-actions row" style={{flexWrap: 'wrap'}}><button className="btn" onClick={() => run(async () => {

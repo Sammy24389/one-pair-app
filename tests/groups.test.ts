@@ -119,3 +119,21 @@ it('requires selected participants to support the same game protocol',()=>{
   expect(group.partyCompatible()).toBe(false)
   expect(group.partyReady()).toBe(false)
 })
+
+it('starts each participant negotiation without waiting for a slow peer',async()=>{
+ let finish!:()=>void
+ const slow=new Promise<void>(resolve=>{finish=resolve})
+ const stream={getTracks:()=>[{stop:vi.fn()}]} as unknown as MediaStream
+ const getUserMedia=vi.fn(async()=>stream)
+ vi.stubGlobal('navigator',{mediaDevices:{getUserMedia}})
+ const group=new PeerGroup(record);groups.push(group)
+ const addStream=vi.fn((_stream:MediaStream,{target}:{target:string})=>target==='slow'?[slow]:[])
+ group.room={addStream,removeStream:vi.fn()} as never
+ group.callers.add('slow');group.callers.add('fast')
+ const joining=group.joinCall(true)
+ await vi.waitFor(()=>expect(addStream).toHaveBeenCalledTimes(2))
+ expect(addStream.mock.calls.map(call=>call[1].target)).toEqual(['slow','fast'])
+ expect(getUserMedia).toHaveBeenCalledWith(expect.objectContaining({video:{width:{ideal:1280},height:{ideal:720},frameRate:{ideal:24,max:30}}}))
+ group.leaveCall();finish();await joining
+ expect(group.local).toBeNull();expect(group.joining).toBe(false)
+})

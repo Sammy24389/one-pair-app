@@ -13,7 +13,10 @@ import android.os.Process
 class GameSession(var handle: IMessageViewHandle) {
 
     var messageUpdated: (new: MutableMap<String, String>) -> Unit = {}
-    var currentMessage: MutableMap<String, String> = mutableMapOf()
+    private val messageState = GameMessageState()
+    var currentMessage: MutableMap<String, String>
+        get() = messageState.current
+        set(message) { messageState.current = message }
     private var outcomeRecorded: Boolean = false
     @OptIn(ExperimentalGlanceRemoteViewsApi::class)
     var liveRemoteViews = GlanceRemoteViews()
@@ -50,8 +53,8 @@ class GameSession(var handle: IMessageViewHandle) {
             recordWinIfApplicable(newMessage)
         }
 
-        messageUpdated(newMessage)
         currentMessage = newMessage
+        messageUpdated(newMessage)
     }
 
     private fun recordWinIfApplicable(message: Map<String, String>) {
@@ -85,7 +88,8 @@ class GameSession(var handle: IMessageViewHandle) {
     }
 
     fun updateSession(context: Context, updates: Map<String, String>, mySession: String, finished: () -> Unit) {
-        val modifiedUpdated = currentMessage.toMutableMap()
+        val baseMessage = currentMessage
+        val modifiedUpdated = baseMessage.toMutableMap()
         for (update in updates) {
             modifiedUpdated[update.key] = update.value
         }
@@ -112,7 +116,7 @@ class GameSession(var handle: IMessageViewHandle) {
 
         handle.updateMessage(update, object : ITaskCompleteCallback.Stub() {
             override fun complete() {
-                currentMessage = modifiedUpdated
+                messageState.commitAcknowledged(baseMessage, modifiedUpdated)
                 finished()
             }
         })

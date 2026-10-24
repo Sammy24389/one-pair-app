@@ -11,7 +11,7 @@ import {iceServers, settings} from './settings'
 import {nativeBridge} from './native'
 import {isAppHidden, withSystemUi} from './platform'
 import * as platformState from './platform'
-import {normalizeOpenPigeonMessage, normalizeOpenPigeonSession, openPigeonParticipants, OPENPIGEON_PROTOCOL, OPENPIGEON_MAX_SESSIONS, OPENPIGEON_RETENTION_MS, type OpenPigeonMessage, type OpenPigeonSession} from './openpigeon-protocol'
+import {normalizeOpenPigeonMessage, normalizeOpenPigeonSession, openPigeonExpiresAt, openPigeonSessionActive, openPigeonParticipants, OPENPIGEON_PROTOCOL, OPENPIGEON_MAX_SESSIONS, OPENPIGEON_RETENTION_MS, type OpenPigeonMessage, type OpenPigeonSession} from './openpigeon-protocol'
 import {idbGet, idbPut, idbDel} from './idb'
 import {claimMedia, releaseMedia} from './media-lease'
 import {basketballRoundRunning,isTimedBasketball,BASKETBALL_ROUND_MS} from './sports-games'
@@ -28,8 +28,8 @@ export const onGroupMessage = (listener: (group: PeerGroup, message: GroupMessag
   messageListeners.add(listener)
   return () => messageListeners.delete(listener)
 }
-const openPigeonListeners = new Set<(group: PeerGroup, session: OpenPigeonSession) => void>()
-export function onOpenPigeonMessage(listener: (group: PeerGroup, session: OpenPigeonSession) => void) {
+const openPigeonListeners = new Set<(group: PeerGroup, session: OpenPigeonSession, replay: boolean) => void>()
+export function onOpenPigeonMessage(listener: (group: PeerGroup, session: OpenPigeonSession, replay: boolean) => void) {
   openPigeonListeners.add(listener)
   return () => {openPigeonListeners.delete(listener)}
 }
@@ -86,6 +86,7 @@ export class PeerGroup {
   messages: GroupMessage[] = []
   race: Race | null = null
   openPigeonSessions: OpenPigeonSession[] = []
+  private pigeonExpiryTimer: ReturnType<typeof setTimeout> | undefined
   private pigeonSeen = new Map<string, string[]>()
   private pigeonStorageError: Error | null = null
   private pigeonPending = new Map<string, {session: string; revision: number; resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout>}>()
@@ -336,6 +337,7 @@ export class PeerGroup {
       return
     }
     if (!existing) throw new Error('The group creator must start this game first.')
+    if (!openPigeonSessionActive(existing)) throw new Error('This match has finished or expired. Start a new game.')
     if (this.pigeonPending.has(message.messageGuid)) throw new Error('This game update is already awaiting confirmation.')
     const owner = [...this.peers].find(([,peer]) => peer.device === this.record.owner)?.[0]
     if (!owner || !this.send) throw new Error('Wait for the group creator to reconnect.')
@@ -356,10 +358,11 @@ export class PeerGroup {
       this.sendOpenPigeon(existing,true)
       return
     }
+    if (existing && !openPigeonSessionActive(existing)) throw new Error('This match has finished or expired. Start a new game.')
     if (!Number.isSafeInteger(revision) || revision !== (existing?.revision ?? 0)) throw new Error('This game has changed. Reopen its latest update.')
     if ((existing?.revision ?? 0) >= 100000) throw new Error('Start a new game.')
     if (this.pigeonSeen.get(message.session)?.includes(message.messageGuid)) throw new Error('This game update was already processed.')
-    const session: OpenPigeonSession = {id:message.session,participants:[...participants],revision:(existing?.revision ?? 0) + 1,author,message,updatedAt:Date.now()}
+    const session: OpenPigeonSession = {id:message.session,participants:[...participants],revision:(existing?.revision ?? 0) + 1,author,message,createdAt:existing?.createdAt ?? existing?.updatedAt ?? Date.now(),updatedAt:Date.now()}
     this.acceptOpenPigeonState(session,false)
     this.sendOpenPigeon(session,false)
   }
@@ -368,6 +371,8 @@ export class PeerGroup {
   }
   private acceptOpenPigeonState(session: OpenPigeonSession, replay: boolean) {
     const existing = this.openPigeonSessions.find(saved => saved.id === session.id)
+    if (existing && (existing.message.completed === true || (session.createdAt !== undefined && session.createdAt !== (existing.createdAt ?? existing.updatedAt)))) { if (session.revision === existing.revision && session.message.messageGuid === existing.message.messageGuid) this.confirmOpenPigeon(existing); return }
+    session = {...session,createdAt:existing?.createdAt ?? existing?.updatedAt ?? session.createdAt ?? session.updatedAt}
     if (existing && (session.revision <= existing.revision || JSON.stringify(existing.participants) !== JSON.stringify(session.participants))) {
       if (session.revision === existing.revision && JSON.stringify(existing) === JSON.stringify(session)) this.confirmOpenPigeon(session)
       return
@@ -378,7 +383,7 @@ export class PeerGroup {
     this.pruneOpenPigeon()
     this.saveOpenPigeon()
     this.confirmOpenPigeon(session)
-    if (!replay && session.participants.includes(identity.get().deviceId)) openPigeonListeners.forEach(listener => {try {listener(this,session)} catch { /* Notification failure must not roll back an accepted update. */ }})
+    if (session.participants.includes(identity.get().deviceId)) openPigeonListeners.forEach(listener => {try {listener(this,session,replay)} catch { /* Notification failure must not roll back an accepted update. */ }})
     bump()
   }
   private confirmOpenPigeon(session: OpenPigeonSession) {
@@ -390,6 +395,10 @@ export class PeerGroup {
   }
   private pruneOpenPigeon() {
     this.openPigeonSessions = this.openPigeonSessions.filter(session => session.updatedAt >= Date.now() - OPENPIGEON_RETENTION_MS).sort((a,b) => b.updatedAt - a.updatedAt).slice(0,OPENPIGEON_MAX_SESSIONS)
+    if (this.pigeonExpiryTimer) clearTimeout(this.pigeonExpiryTimer)
+    this.pigeonExpiryTimer = undefined
+    const deadlines = this.openPigeonSessions.filter(session => openPigeonSessionActive(session)).map(openPigeonExpiresAt)
+    if (!this.disposed && deadlines.length) this.pigeonExpiryTimer = setTimeout(() => {this.pigeonExpiryTimer = undefined; this.pruneOpenPigeon(); bump()}, Math.max(1, Math.min(...deadlines) - Date.now()))
     const active = new Set(this.openPigeonSessions.map(session => session.id))
     for (const id of this.pigeonSeen.keys()) if (!active.has(id)) this.pigeonSeen.delete(id)
   }
@@ -408,7 +417,7 @@ export class PeerGroup {
       const session = normalizeOpenPigeonSession(value,this.record.owner)
       if (!session || session.updatedAt < Date.now() - OPENPIGEON_RETENTION_MS) continue
       const current = this.openPigeonSessions.find(saved => saved.id === session.id)
-      if (!current || session.revision > current.revision) this.openPigeonSessions = [...this.openPigeonSessions.filter(saved => saved.id !== session.id),session]
+      if (!current || session.revision > current.revision) this.openPigeonSessions = [...this.openPigeonSessions.filter(saved => saved.id !== session.id),{...session,createdAt:session.createdAt ?? session.updatedAt}]
       const seen = stored.seen && typeof stored.seen === 'object' && !Array.isArray(stored.seen) ? (stored.seen as Record<string,unknown>)[session.id] : undefined
       const guids = Array.isArray(seen) ? seen.slice(-128).filter((id): id is string => typeof id === 'string' && /^[\x21-\x7e]{1,100}$/.test(id)) : []
       this.pigeonSeen.set(session.id,[...new Set([...(this.pigeonSeen.get(session.id) ?? []),...guids,session.message.messageGuid])].slice(-128))
@@ -501,15 +510,16 @@ export class PeerGroup {
     if (!claimMedia(this)) throw new Error('Finish your current call first.')
     const generation = ++this.generation; this.joining = true; this.error = ''; bump()
     try {
-      const stream = await withSystemUi(() => navigator.mediaDevices.getUserMedia({audio: true, video}))
+      const stream = await withSystemUi(() => navigator.mediaDevices.getUserMedia({audio: true, video: video ? {width: {ideal: 1280}, height: {ideal: 720}, frameRate: {ideal: 24, max: 30}} : false}))
       if (this.disposed || generation !== this.generation) { stream.getTracks().forEach(t => t.stop()); return }
       this.local = stream
       nativeBridge?.startKeepAlive({callAudio: true, callVideo: video}).catch(() => this.fail(new Error('Android background call service could not start. Keep the app visible.')))
       this.send?.({type: 'call', joined: true})
-      for (const peerId of this.callers) {
-        if (this.disposed || generation !== this.generation) break
-        await Promise.all(this.room?.addStream(stream, {target: peerId}) ?? [])
-      }
+      const room = this.room
+      await Promise.all([...this.callers].map(async peerId => {
+        if (this.disposed || generation !== this.generation || this.room !== room) return
+        await Promise.all(room?.addStream(stream, {target: peerId}) ?? [])
+      }))
     } catch (e) { if (generation === this.generation) { this.leaveCall(); this.fail(e) } }
     finally { if (generation === this.generation) this.joining = false; bump() }
   }
@@ -542,7 +552,7 @@ export class PeerGroup {
     }
     this.local = null; this.remote.clear(); releaseMedia(this); this.send?.({type: 'call', joined: false}); bump()
   }
-  async destroy() { this.rejectOpenPigeonPending('The group was closed.'); this.clearBasketballClock(); this.stopPresentation(); this.disposed = true; ++this.connectionGeneration; this.historyTimers.forEach(clearTimeout); this.historyTimers.clear(); this.leaveCall(); await this.room?.leave(); this.room = null; await this.saving }
+  async destroy() { if (this.pigeonExpiryTimer) clearTimeout(this.pigeonExpiryTimer); this.rejectOpenPigeonPending('The group was closed.'); this.clearBasketballClock(); this.stopPresentation(); this.disposed = true; ++this.connectionGeneration; this.historyTimers.forEach(clearTimeout); this.historyTimers.clear(); this.leaveCall(); await this.room?.leave(); this.room = null; await this.saving }
 }
 function validMessage(v: unknown): v is GroupMessage {
   const m = v as GroupMessage

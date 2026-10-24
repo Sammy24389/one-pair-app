@@ -3,7 +3,7 @@ import * as Y from 'yjs'
 import {Space} from '../src/lib/space'
 import {STATUS_LIFETIME} from '../src/lib/status'
 
-const fixture = vi.hoisted(() => ({actions: new Map<string, any>(), stored: vi.fn(), has: vi.fn(async () => false)}))
+const fixture = vi.hoisted(() => ({actions: new Map<string, any>(), stored: vi.fn(), has: vi.fn(async (_id: string) => false)}))
 vi.mock('y-indexeddb', () => ({IndexeddbPersistence: class {whenSynced = Promise.resolve(); destroy = vi.fn()}}))
 vi.mock('../src/lib/identity', () => ({identity: {get: () => ({deviceId: 'me'})}}))
 vi.mock('../src/lib/call', () => ({CallController: class {dispose = vi.fn(); hangup = vi.fn()}}))
@@ -19,7 +19,7 @@ beforeEach(async () => {
   vi.useFakeTimers()
   fixture.actions.clear()
   fixture.stored.mockReset()
-  fixture.has.mockClear()
+  fixture.has.mockReset().mockResolvedValue(false)
   space = new Space({id: 'pair', secret: 'AA==', peerDevice: 'peer', peerName: 'Peer', createdAt: 0})
   await space.connect()
   space.peerId = 'connection'
@@ -68,4 +68,95 @@ it('requests only valid member profile video references after remote sync',async
   profiles.set('stranger',{name:'Unknown',emoji:'X',avatarMedia:{id:'qrstuvwxyz012345',mime:'video/mp4',size:4}})
   fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote));await vi.advanceTimersByTimeAsync(1500)
   expect(fixture.actions.get('need').send).toHaveBeenCalledWith(['abcdefghijklmnop'],{target:'connection'});remote.destroy()
+})
+
+
+it('does not postpone media recovery while remote text updates keep arriving', async () => {
+  const remote = new Y.Doc()
+  remote.getArray('messages').push([{id: 'photo', mediaId: 'recent-photo'}])
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  for (let i = 0; i < 5; i++) {
+    await vi.advanceTimersByTimeAsync(100)
+    remote.getMap('reads').set('peer', i)
+    fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  }
+  expect(fixture.actions.get('need').send).toHaveBeenCalledTimes(1)
+  expect(fixture.actions.get('need').send).toHaveBeenCalledWith(['recent-photo'], {target: 'connection'})
+  remote.destroy()
+})
+
+it('retries missing media without needing another document update', async () => {
+  const remote = new Y.Doc()
+  remote.getArray('messages').push([{id: 'photo', mediaId: 'lost-photo'}])
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  await vi.advanceTimersByTimeAsync(150)
+  expect(fixture.actions.get('need').send).toHaveBeenCalledTimes(1)
+  await vi.advanceTimersByTimeAsync(60_150)
+  expect(fixture.actions.get('need').send).toHaveBeenCalledTimes(2)
+  remote.destroy()
+})
+
+it('limits outstanding requests to the sender batch and requests remaining media as slots free', async () => {
+  const remote = new Y.Doc()
+  remote.getArray('messages').push(Array.from({length: 201}, (_, i) => ({id: `m-${i}`, mediaId: `batch-${i}`})))
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  await vi.advanceTimersByTimeAsync(150)
+  const send = fixture.actions.get('need').send
+  expect(send).toHaveBeenCalledTimes(1)
+  expect(send.mock.calls[0][0]).toHaveLength(200)
+  expect(send.mock.calls[0][0]).not.toContain('batch-200')
+  fixture.has.mockImplementation(async (id: string) => id !== 'batch-200')
+  await fixture.actions.get('media').onMessage(new Uint8Array(4), {metadata: {id: 'batch-0', mime: 'image/png'}})
+  await vi.advanceTimersByTimeAsync(150)
+  expect(send).toHaveBeenLastCalledWith(['batch-200'], {target: 'connection'})
+  remote.destroy()
+})
+
+it('extends the retry deadline while a requested transfer is progressing', async () => {
+  const remote = new Y.Doc()
+  remote.getArray('messages').push([{id: 'video', mediaId: 'slow-video'}])
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  await vi.advanceTimersByTimeAsync(30_150)
+  fixture.actions.get('media').onReceiveProgress(.5, {metadata: {id: 'slow-video'}})
+  await vi.advanceTimersByTimeAsync(30_150)
+  expect(fixture.actions.get('need').send).toHaveBeenCalledTimes(1)
+  await vi.advanceTimersByTimeAsync(30_150)
+  expect(fixture.actions.get('need').send).toHaveBeenCalledTimes(2)
+  remote.destroy()
+})
+
+it('cancels scheduled retries when the connection is closed', async () => {
+  const remote = new Y.Doc()
+  remote.getArray('messages').push([{id: 'photo', mediaId: 'pending-photo'}])
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  await vi.advanceTimersByTimeAsync(150)
+  const send = fixture.actions.get('need').send
+  await space.disconnect()
+  await vi.advanceTimersByTimeAsync(61_000)
+  expect(send).toHaveBeenCalledTimes(1)
+  remote.destroy()
+})
+
+it('does not let a pending request-send promise block later automatic retries', async () => {
+  fixture.actions.get('need').send.mockImplementationOnce(() => new Promise(() => {}))
+  const remote = new Y.Doc()
+  remote.getArray('messages').push([{id: 'photo', mediaId: 'pending-send'}])
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  await vi.advanceTimersByTimeAsync(60_300)
+  expect(fixture.actions.get('need').send).toHaveBeenCalledTimes(2)
+  remote.destroy()
+})
+
+
+it('rotates retry batches so missing old attachments cannot starve later media', async () => {
+  const remote = new Y.Doc()
+  remote.getArray('messages').push(Array.from({length: 201}, (_, i) => ({id: `m-${i}`, mediaId: `batch-${i}`})))
+  fixture.actions.get('up').onMessage(Y.encodeStateAsUpdate(remote))
+  await vi.advanceTimersByTimeAsync(60_300)
+  const calls = fixture.actions.get('need').send.mock.calls
+  expect(calls).toHaveLength(2)
+  expect(calls[0][0]).not.toContain('batch-200')
+  expect(calls[1][0][0]).toBe('batch-200')
+  expect(calls[1][0]).toHaveLength(200)
+  remote.destroy()
 })

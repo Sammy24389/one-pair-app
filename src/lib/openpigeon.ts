@@ -2,7 +2,7 @@ import {registerPlugin,type PluginListenerHandle} from '@capacitor/core'
 import {createStore} from './store'
 import {isNative,platform,onAppVisibility,isAppHidden} from './platform'
 import {groupEvents,groupRegistry,getGroup,onOpenPigeonMessage,hasGroupCall,groupRecoveryTargets,type PeerGroup} from './groups'
-import {normalizeOpenPigeonMessage,openPigeonParticipants,type OpenPigeonMessage,type OpenPigeonSession} from './openpigeon-protocol'
+import {normalizeOpenPigeonMessage,openPigeonParticipants,openPigeonSessionActive,OPENPIGEON_MATCH_MS,type OpenPigeonMessage,type OpenPigeonSession} from './openpigeon-protocol'
 import {idbGet,idbUpdate} from './idb'
 import {identity} from './identity'
 import {nativeBridge} from './native'
@@ -38,7 +38,7 @@ function bounded<T>(promise:Promise<T>,ms=15000):Promise<T>{return new Promise((
 function pendingList(value:unknown):Pending[]{
  if(!Array.isArray(value))return []
  return value.flatMap((v):Pending[]=>{
-  if(!v||typeof v.requestId!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(v.requestId)||typeof v.roomId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(v.roomId)||!openPigeonParticipants(v.participants)||!Number.isFinite(v.at)||v.at>Date.now()+300000||Date.now()-v.at>=7*86400000)return []
+  if(!v||typeof v.requestId!=='string'||!/^[a-zA-Z0-9_-]{1,100}$/.test(v.requestId)||typeof v.roomId!=='string'||!/^[a-zA-Z0-9_-]{8,100}$/.test(v.roomId)||!openPigeonParticipants(v.participants)||!Number.isFinite(v.at)||v.at>Date.now()+300000||Date.now()-v.at>=OPENPIGEON_MATCH_MS)return []
   const message=normalizeOpenPigeonMessage(v.message)
   return message?[{requestId:v.requestId,roomId:v.roomId,participants:[...v.participants],message,at:v.at}]:[]
  }).slice(-MAX_PENDING)
@@ -103,7 +103,7 @@ export async function openOpenPigeonPicker(group:PeerGroup,participants:string[]
 export async function openOpenPigeonGame(group:PeerGroup,session:OpenPigeonSession){
  await initializeOpenPigeon();await refreshOpenPigeon();ready(group,session.participants)
  const current=group.openPigeonSessions.find(s=>s.id===session.id)
- if(!current||!current.participants.includes(identity.get().deviceId))throw new Error('You are not a player in this match.')
+ if(!current||!openPigeonSessionActive(current)||!current.participants.includes(identity.get().deviceId))throw new Error('You are not a player in this match.')
  await keepConnected();activeRoom=group.record.id
  try{await bounded(bridge!.openGame({roomId:group.record.id,participants:[...current.participants],message:current.message}))}catch(e){activeRoom=null;await releaseKeepAlive();failure(e);throw e}
 }
@@ -114,10 +114,10 @@ export function initializeOpenPigeon():Promise<void>{
  const task=(async()=>{
   listeners.push(await bridge.addListener('message',value=>{void queueMessage(value).catch(failure)}))
   listeners.push(await bridge.addListener('state',value=>{openPigeonState.set({connected:value.connected===true,locked:value.locked===true,...(value.error?{error:value.error}:{})});if(!value.connected&&!value.locked)void releaseKeepAlive()}))
-  unsubscribe.push(onOpenPigeonMessage((group,session)=>{
+  unsubscribe.push(onOpenPigeonMessage((group,session,replay)=>{
    if(!session.participants.includes(identity.get().deviceId)||session.author===identity.get().deviceId)return
    void bounded(bridge.syncMessage({roomId:group.record.id,participants:session.participants,message:session.message})).catch(failure)
-   if(Date.now()-session.updatedAt<60000){const route={sub:'groups' as const,tab:'more' as const,focus:group.record.id};if(isAppHidden())void notifyNow('OpenPigeon','A game has an update. Open Padi to play.',route);else if(activeRoom!==group.record.id)toast({title:'OpenPigeon',body:'A game has an update.',action:()=>openRoute(route)})}
+   if(!replay&&openPigeonSessionActive(session)&&Date.now()-session.updatedAt<60000){const route={sub:'groups' as const,tab:'more' as const,focus:group.record.id};if(isAppHidden())void notifyNow('OpenPigeon','A game has an update. Open Padi to play.',route);else if(activeRoom!==group.record.id)toast({title:'OpenPigeon',body:'A game has an update.',action:()=>openRoute(route)})}
   }))
   unsubscribe.push(groupEvents.subscribe(()=>{void drain().catch(failure)}))
   unsubscribe.push(groupRegistry.subscribe(()=>{if(activeRoom&&!groupRegistry.get().records.some(r=>r.id===activeRoom)){activeRoom=null;void bounded(bridge.close()).catch(failure)}void drain().catch(failure)}))

@@ -2,7 +2,7 @@ import {afterEach,beforeEach,expect,it,vi} from 'vitest'
 import {PeerGroup,onOpenPigeonMessage} from '../src/lib/groups'
 import {idbGet,idbPut} from '../src/lib/idb'
 import {joinRoom} from 'trystero'
-import {normalizeOpenPigeonMessage,normalizeOpenPigeonSession,OPENPIGEON_RETENTION_MS,type OpenPigeonMessage,type OpenPigeonSession} from '../src/lib/openpigeon-protocol'
+import {normalizeOpenPigeonMessage,normalizeOpenPigeonSession,OPENPIGEON_RETENTION_MS,OPENPIGEON_MATCH_MS,openPigeonSessionActive,type OpenPigeonMessage,type OpenPigeonSession} from '../src/lib/openpigeon-protocol'
 const local = vi.hoisted(() => ({deviceId:'owner123456',profile:{name:'Owner'}}))
 const state = vi.hoisted(() => ({native:true,platform:'android'}))
 vi.mock('../src/lib/identity',() => ({identity:{get:() => local}}))
@@ -81,15 +81,15 @@ it('rejects nonparticipants, stale revisions, roster changes and replayed GUIDs'
   expect(send.mock.calls.some(([event,target]) => event.type === 'pigeon-state' && event.replay === true && target === 'friend')).toBe(true)
   expect(send.mock.calls.some(([event,target]) => event.type === 'pigeon-state' && target === 'third')).toBe(false)
 })
-it('guests accept only owner state, reject rollbacks and do not notify history or duplicate replay',() => {
+it('guests accept only owner state, reject rollbacks and mark catch-up state and suppress duplicate replay',() => {
   const {group} = guest(),listener=vi.fn();subscriptions.push(onOpenPigeonMessage(listener))
   receive(group,{type:'pigeon-state',session:snapshot()},'third');expect(group.openPigeonSessions).toHaveLength(0)
-  receive(group,{type:'pigeon-state',session:snapshot(),replay:true},'owner');expect(group.openPigeonSessions).toHaveLength(1);expect(listener).not.toHaveBeenCalled()
-  receive(group,{type:'pigeon-state',session:snapshot(2,{author:players[1]})},'owner');expect(listener).toHaveBeenCalledTimes(1)
+  receive(group,{type:'pigeon-state',session:snapshot(),replay:true},'owner');expect(group.openPigeonSessions).toHaveLength(1);expect(listener).toHaveBeenCalledWith(group,expect.anything(),true)
+  receive(group,{type:'pigeon-state',session:snapshot(2,{author:players[1]})},'owner');expect(listener).toHaveBeenCalledTimes(2)
   receive(group,{type:'pigeon-state',session:snapshot()},'owner')
   receive(group,{type:'pigeon-state',session:snapshot(2,{author:players[1]})},'owner')
   receive(group,{type:'pigeon-state',session:snapshot(2,{message:message('conflicting')})},'owner')
-  expect(group.openPigeonSessions[0].revision).toBe(2);expect(listener).toHaveBeenCalledTimes(1)
+  expect(group.openPigeonSessions[0].revision).toBe(2);expect(listener).toHaveBeenCalledTimes(2)
 })
 it('waits for owner acknowledgement before accepting a guest native callback',async () => {
   const {group,send} = guest();receive(group,{type:'pigeon-state',session:snapshot(),replay:true},'owner')
@@ -151,4 +151,30 @@ it('does not restore a delayed storage load after the group was closed',async ()
   vi.mocked(idbGet).mockImplementationOnce(() => new Promise(resolve => {finish=resolve}))
   const connecting=group.connect();await group.destroy();finish([]);await connecting
   expect(joinRoom).not.toHaveBeenCalled();expect(group.openPigeonSessions).toHaveLength(0)
+})
+
+it('keeps a fixed24hour deadline across turns and rejects play at expiry',async () => {
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-10-24T00:00:00Z'))
+  const {group}=make();await group.openPigeonMessage(players,message())
+  const created=group.openPigeonSessions[0].createdAt
+  await vi.advanceTimersByTimeAsync(OPENPIGEON_MATCH_MS-1)
+  await group.openPigeonMessage(players,message('later'))
+  expect(group.openPigeonSessions[0].createdAt).toBe(created)
+  expect(openPigeonSessionActive(group.openPigeonSessions[0])).toBe(true)
+  await vi.advanceTimersByTimeAsync(1)
+  expect(openPigeonSessionActive(group.openPigeonSessions[0])).toBe(false)
+  await expect(group.openPigeonMessage(players,message('too-late'))).rejects.toThrow('expired')
+})
+it('closes completed games immediately and cannot revive them with another turn',async () => {
+  const {group}=make();await group.openPigeonMessage(players,message())
+  await group.openPigeonMessage(players,{...message('finished'),completed:true})
+  expect(openPigeonSessionActive(group.openPigeonSessions[0])).toBe(false)
+  await expect(group.openPigeonMessage(players,message('revive'))).rejects.toThrow('finished')
+  expect(group.openPigeonSessions[0].message.completed).toBe(true)
+})
+it('validates completion and creation metadata and keeps opaque payload unchanged',() => {
+  expect(normalizeOpenPigeonMessage({...message(),completed:'yes'})).toBeNull()
+  expect(normalizeOpenPigeonMessage({...message(),completed:true})?.completed).toBe(true)
+  expect(normalizeOpenPigeonSession({...snapshot(),createdAt:Date.now()+1e6},record.owner)).toBeNull()
+  expect(normalizeOpenPigeonSession({...snapshot(),createdAt:-1},record.owner)).toBeNull()
 })

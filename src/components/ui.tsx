@@ -56,10 +56,10 @@ export const Avatar = ({p, size = 40, conn}: {p: Profile; size?: number; conn?: 
   </div>
 }
 
-export const TopBar = ({title, sub, right, noBack}: {title: ReactNode; sub?: ReactNode; right?: ReactNode; noBack?: boolean}) => (
+export const TopBar = ({title, sub, right, noBack, onBack, backLabel = 'Back'}: {title: ReactNode; sub?: ReactNode; right?: ReactNode; noBack?: boolean; onBack?: () => void; backLabel?: string}) => (
   <div className="topbar">
     {!noBack && (
-      <button className="icon-btn" onClick={back} aria-label="Back">
+      <button className="icon-btn" onClick={onBack ?? back} aria-label={backLabel}>
         <ChevronLeft size={22} />
       </button>
     )}

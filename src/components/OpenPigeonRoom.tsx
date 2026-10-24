@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react'
 import {identity} from '../lib/identity'
 import {groupEvents, type PeerGroup} from '../lib/groups'
 import {openPigeonState, refreshOpenPigeon, openOpenPigeonPicker, openOpenPigeonGame} from '../lib/openpigeon'
+import {openPigeonSessionActive} from '../lib/openpigeon-protocol'
 import '../styles/openpigeon.css'
 
 export default function OpenPigeonRoom({group}: {group: PeerGroup}) {
@@ -18,6 +19,7 @@ export default function OpenPigeonRoom({group}: {group: PeerGroup}) {
   const members = [{device: me, name: 'You', openpigeon: state.installed ? 1 : undefined}, ...peers]
   const defaults = [me, ...peers.filter(peer => peer.openpigeon === 1).slice(0, 1).map(peer => peer.device)]
   const selected = (chosen ?? defaults).filter(id => members.some(member => member.device === id))
+  const matches = group.openPigeonSessions.filter(session => openPigeonSessionActive(session))
   const owner = group.record.owner === me
   const locked = state.locked || busy || state.loading
   const ready = selected.length >= 2 && selected.length <= 4 && selected.includes(me) && group.openPigeonReady(selected)
@@ -42,7 +44,7 @@ export default function OpenPigeonRoom({group}: {group: PeerGroup}) {
       {(state.error || (!state.loading && !state.installed)) && <button className="btn" disabled={locked} onClick={() => void run(refreshOpenPigeon)}>Retry connection</button>}
       <p className="muted small">Games by OpenPigeon. Included from its AGPL release with original creator credits preserved.</p>
     </>}
-      <section className="openpigeon-matches" aria-label="OpenPigeon matches"><h3>Your matches</h3>{!group.openPigeonSessions.length ? <p className="muted">No OpenPigeon matches yet.</p> : <ul>{group.openPigeonSessions.map(session => {
+      <section className="openpigeon-matches" aria-label="OpenPigeon matches"><h3>Your matches</h3><p className="muted small">Matches close when finished or 24 hours after they start.</p>{!matches.length ? <p className="muted">No OpenPigeon matches yet.</p> : <ul>{matches.map(session => {
         const participant = session.participants.includes(me)
         const playable = participant && state.supported && state.installed && group.openPigeonReady(session.participants)
         return <li key={session.id}><div><h4>{session.message.caption || session.message.ldText || 'OpenPigeon game'}</h4>{session.message.subcaption && <p>{session.message.subcaption}</p>}<small className="muted">{session.participants.map(name).join(' · ')}</small></div><button className="btn" disabled={locked || !playable} onClick={() => void run(() => openOpenPigeonGame(group, session))} aria-label={`Open ${session.message.caption || 'OpenPigeon game'}`}>Open / Resume</button>{!participant && <small className="muted">You are not a player in this match.</small>}{participant && !playable && <small className="muted">Use the latest OnePair Android build, and wait for all players to connect.</small>}</li>

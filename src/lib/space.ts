@@ -24,6 +24,8 @@ import type {
 } from './types'
 
 export const APP_ID = 'onepair-p2p-v1'
+const MEDIA_REQUEST_BATCH = 200
+const MEDIA_RETRY_MS = 60_000
 
 export type ConnState = 'offline' | 'searching' | 'online'
 
@@ -84,7 +86,11 @@ export class Space {
   }
   private typingTimer?: ReturnType<typeof setTimeout>
   private needTimer?: ReturnType<typeof setTimeout>
-  private requested = new Set<string>()
+  private needTimerAt = 0
+  private needRunning = false
+  private needCursor = 0
+  private needRetryTimer?: ReturnType<typeof setTimeout>
+  private requested = new Map<string, number>()
   private myPresence: Presence = {}
 
   constructor(pair: PairRecord) {
@@ -200,6 +206,10 @@ export class Space {
       const id = (metadata as {id?: string})?.id
       if (id) {
         this.transfers.set(id, p)
+        if (this.requested.has(id)) {
+          this.requested.set(id, Date.now() + MEDIA_RETRY_MS)
+          this.scheduleNeedRetry()
+        }
         this.bump()
       }
     }
@@ -215,6 +225,8 @@ export class Space {
       await putMedia(m.id, new Blob([bin(data) as BlobPart], {type: m.mime}), m.name)
       this.transfers.delete(m.id)
       this.requested.delete(m.id)
+      this.scheduleNeedRetry()
+      this.scheduleNeedCheck(150)
       this.bump()
     }
     this.act.need.onMessage = async ids => {
@@ -238,12 +250,18 @@ export class Space {
       this.conn = 'online'
       this.act.sv.send(Y.encodeStateVector(this.doc), {target: peerId})
       this.act.presence.send(this.myPresence, {target: peerId})
-      this.scheduleNeedCheck(2500)
+      this.scheduleNeedCheck(250)
       this.bump()
     }
     room.onPeerLeave = peerId => {
       if (this.room !== room || peerId !== this.peerId) return
       this.peerId = null
+      clearTimeout(this.needTimer)
+      this.needTimer = undefined
+      clearTimeout(this.needRetryTimer)
+      this.needRetryTimer = undefined
+      this.requested.clear()
+      this.transfers.clear()
       this.peerTyping = false
       this.conn = 'searching'
       this.lastSeen.set(this.peer, Date.now())
@@ -263,6 +281,9 @@ export class Space {
     this.connectionGeneration++
     this.connecting = null
     clearTimeout(this.needTimer)
+    this.needTimer = undefined
+    clearTimeout(this.needRetryTimer)
+    this.needRetryTimer = undefined
     clearTimeout(this.typingTimer)
     this.requested.clear()
     this.call.hangup()
@@ -362,22 +383,67 @@ export class Space {
     return ids
   }
 
-  private scheduleNeedCheck(delay = 1500) {
+  private scheduleNeedCheck(delay = 150) {
+    if (this.disposed || !this.peerId) return
+    const due = Date.now() + delay
+    // Later updates must not postpone an already scheduled media request.
+    if (this.needTimer !== undefined && this.needTimerAt <= due) return
     clearTimeout(this.needTimer)
-    this.needTimer = setTimeout(async () => {
-      if (!this.peerId) return
-      const missing: string[] = []
-      for (const id of this.collectMediaIds()) {
-        if (this.requested.has(id) || this.transfers.has(id)) continue
-        if (!(await hasMedia(id))) missing.push(id)
-      }
-      if (missing.length) {
-        missing.forEach(id => this.requested.add(id))
-        this.act.need.send(missing, {target: this.peerId}).catch(() => {})
-        // allow re-request later if the transfer never arrives
-        setTimeout(() => missing.forEach(id => this.requested.delete(id)), 60_000)
-      }
+    this.needTimerAt = due
+    this.needTimer = setTimeout(() => {
+      this.needTimer = undefined
+      void this.requestMissingMedia().catch(() => this.scheduleNeedCheck(MEDIA_RETRY_MS))
     }, delay)
+  }
+
+  private async requestMissingMedia() {
+    if (this.needRunning) {this.scheduleNeedCheck(); return}
+    if (this.disposed || !this.peerId) return
+    const generation = this.connectionGeneration, peerId = this.peerId
+    const current = () => !this.disposed && generation === this.connectionGeneration && peerId === this.peerId
+    const capacity = MEDIA_REQUEST_BATCH - this.requested.size
+    if (capacity <= 0) return
+    this.needRunning = true
+    try {
+      const missing: string[] = []
+      const ids = [...this.collectMediaIds()]
+      const start = ids.length ? this.needCursor % ids.length : 0
+      for (let offset = 0; offset < ids.length; offset++) {
+        const index = (start + offset) % ids.length
+        const id = ids[index]
+        if (this.requested.has(id) || this.transfers.has(id)) continue
+        const available = await hasMedia(id)
+        if (!current()) return
+        if (!available) {
+          missing.push(id)
+          this.needCursor = (index + 1) % ids.length
+        }
+        if (missing.length >= capacity) break
+      }
+      if (!missing.length || !current()) return
+      missing.forEach(id => this.requested.set(id, Date.now() + MEDIA_RETRY_MS))
+      this.scheduleNeedRetry()
+      // Keep deadlines even if sending fails or remains pending.
+      void this.act.need.send(missing, {target: peerId}).catch(() => {})
+    } finally {this.needRunning = false}
+  }
+
+  private scheduleNeedRetry() {
+    clearTimeout(this.needRetryTimer)
+    this.needRetryTimer = undefined
+    if (this.disposed || !this.peerId || !this.requested.size) return
+    const generation = this.connectionGeneration, peerId = this.peerId
+    const next = Math.min(...this.requested.values())
+    this.needRetryTimer = setTimeout(() => {
+      this.needRetryTimer = undefined
+      if (this.disposed || generation !== this.connectionGeneration || peerId !== this.peerId) return
+      const now = Date.now()
+      for (const [id, expires] of this.requested) {
+        if (expires <= now) {this.requested.delete(id); this.transfers.delete(id)}
+      }
+      this.scheduleNeedCheck()
+      this.scheduleNeedRetry()
+    }, Math.max(0, next - Date.now()))
   }
 
   // ---------- data helpers ----------
